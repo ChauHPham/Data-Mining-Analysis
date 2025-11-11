@@ -204,4 +204,32 @@ class RandomForest:
         """
         predictions = self.predict(X)
         return float(np.mean(predictions == y.to_numpy()))
+    
+    def get_params(self, deep=True):
+        """
+        Get parameters for this estimator (required for sklearn compatibility).
+        
+        :param deep: If True, will return the parameters for this estimator and
+                     contained subobjects that are estimators.
+        :return: Dictionary of parameter names mapped to their values
+        """
+        return {
+            'n_estimators': self.n_estimators,
+            'criterion': self.criterion,
+            'max_depth': self.max_depth,
+            'min_samples_split': self.min_samples_split,
+            'max_features': self.max_features,
+            'random_state': self.random_state
+        }
+    
+    def set_params(self, **params):
+        """
+        Set the parameters of this estimator (required for sklearn compatibility).
+        
+        :param params: Dictionary of parameter names and values
+        :return: self
+        """
+        for key, value in params.items():
+            setattr(self, key, value)
+        return self
 
