@@ -8,6 +8,11 @@ This project analyzes diabetic patient data using clustering and classification 
 
 The dataset (`data/diabetic_data.csv`) contains information about diabetic patients, including features such as patient demographics, medical history, medications, and readmission status.
 
+## Report
+
+Report detailing the methodology of the project and any analysis and findings obtained.
+[Report Placeholder](https://docs.google.com/document/d/19IGGgtCu5_qCoi9_SZsRXwtrB-Jl6wnWgFtO-hZ9TaM/edit?usp=sharing) (to be filled out)
+
 ---
 
 ## Project Structure
