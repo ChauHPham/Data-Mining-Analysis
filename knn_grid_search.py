@@ -2,8 +2,9 @@
 k-NN Grid Search for Diabetic Readmission
 CMPT 459 Course Project
 
-Performs manual grid search over KNN hyperparameters with K-fold CV,
-plots accuracy vs k, and evaluates the best model on a test set.
+Performs manual grid search over KNN hyperparameters with K-fold CV
+on a PCA-reduced feature space, plots accuracy vs k, and evaluates
+the best model on a hold-out test set.
 """
 
 import argparse
@@ -15,6 +16,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
+from sklearn.decomposition import PCA
 from sklearn.metrics import accuracy_score
 
 from knn_classifier import KNNClassifier  # uses the class defined in knn_classifier.py
@@ -28,16 +30,21 @@ def load_and_preprocess_data(path: str):
     df = pd.read_csv(path)
     print(f"Original shape: {df.shape}")
 
+    # Replace '?' with NaN
     df = df.replace('?', np.nan)
 
+    # Drop columns with >40% missing
     threshold = 0.4 * len(df)
     df = df.dropna(thresh=threshold, axis=1)
 
+    # Fill categorical NAs
     for col in df.select_dtypes(include='object').columns:
         df[col] = df[col].fillna("Unknown")
 
+    # Encode target
     df["readmitted"] = df["readmitted"].map({'NO': 0, '>30': 1, '<30': 2})
 
+    # Encode categorical
     cat_cols = df.select_dtypes(include='object').columns
     le = LabelEncoder()
     for col in cat_cols:
@@ -46,16 +53,18 @@ def load_and_preprocess_data(path: str):
         else:
             df = pd.get_dummies(df, columns=[col], drop_first=True)
 
+    # Drop obvious IDs
     for col in ["encounter_id", "patient_nbr"]:
         if col in df.columns:
             df = df.drop(columns=[col])
 
+    # Scale numeric
     num_cols = df.select_dtypes(include=['int64', 'float64']).columns
     scaler = StandardScaler()
     df[num_cols] = scaler.fit_transform(df[num_cols])
 
     X = df.drop(columns=["readmitted"]).values
-    y = df["readmitted"].values
+    y = df["readmitted"].values.astype(int)
 
     print("Preprocessing complete! Final shape:", X.shape)
     return X, y
@@ -79,6 +88,10 @@ def kfold_split(n_samples: int, cv: int, shuffle: bool, random_state: int):
 
 
 def grid_search_knn(X, y, ks, weights_list, p_values, cv=5, random_state=42):
+    """
+    Run grid search over KNN hyperparameters on (X, y).
+    X is assumed to already be PCA-reduced.
+    """
     n_samples = X.shape[0]
     splits = kfold_split(n_samples, cv=cv, shuffle=True, random_state=random_state)
 
@@ -103,6 +116,7 @@ def grid_search_knn(X, y, ks, weights_list, p_values, cv=5, random_state=42):
             clf = KNNClassifier(n_neighbors=k, weights=w, p=p)
             clf.fit(X_train, y_train)
             y_pred = clf.predict(X_val)
+            # y_pred should already be integers from KNNClassifier
             acc = accuracy_score(y_val, y_pred)
             cv_scores.append(acc)
 
@@ -130,7 +144,6 @@ def plot_grid_results(results, out_path):
     """
     Plot mean accuracy vs k, with separate lines per (weights, p) combination.
     """
-    # Group by (weights, p)
     combos = {}
     for r in results:
         key = (r["weights"], r["p"])
@@ -176,6 +189,10 @@ def parse_args():
                         help='Comma-separated Minkowski p values, e.g. "1,2"')
     parser.add_argument('--cv', type=int, default=3,
                         help='Number of CV folds')
+    parser.add_argument('--pca-components', type=int, default=50,
+                        help='Number of PCA components before grid search (default: 50)')
+    parser.add_argument('--max-train-samples', type=int, default=50000,
+                        help='Max training samples for grid search (for speed/memory)')
     parser.add_argument('--output-dir', type=str, default='knn_grid_results',
                         help='Directory for results & plots')
     parser.add_argument('--random-state', type=int, default=42,
@@ -195,30 +212,55 @@ def main():
     print("=" * 70)
     print("k-NN GRID SEARCH")
     print("=" * 70)
-    print(f"Dataset:    {args.data}")
-    print(f"k values:   {ks}")
-    print(f"Weights:    {weights_list}")
-    print(f"p values:   {p_values}")
-    print(f"CV folds:   {args.cv}")
-    print(f"Test size:  {args.test_size}")
+    print(f"Dataset:         {args.data}")
+    print(f"k values:        {ks}")
+    print(f"Weights:         {weights_list}")
+    print(f"p values:        {p_values}")
+    print(f"CV folds:        {args.cv}")
+    print(f"Test size:       {args.test_size}")
+    print(f"PCA components:  {args.pca_components}")
+    print(f"Max train size:  {args.max_train_samples}")
     print("=" * 70)
 
-    # Load & preprocess
+    # Load & preprocess (high-dimensional space)
     X, y = load_and_preprocess_data(args.data)
 
     # Hold-out test set for final evaluation
-    X_train, X_test, y_train, y_test = train_test_split(
+    X_train_full, X_test, y_train_full, y_test = train_test_split(
         X, y, test_size=args.test_size,
         random_state=args.random_state, stratify=y
     )
 
-    # Grid search on training data
+    # Optional subsampling of training data (for speed)
+    n_train_full = X_train_full.shape[0]
+    if n_train_full > args.max_train_samples:
+        print(f"Training set has {n_train_full} samples; sampling {args.max_train_samples} for grid search...")
+        rng = np.random.default_rng(args.random_state)
+        idx = rng.choice(n_train_full, size=args.max_train_samples, replace=False)
+        X_train_gs = X_train_full[idx]
+        y_train_gs = y_train_full[idx]
+    else:
+        X_train_gs = X_train_full
+        y_train_gs = y_train_full
+
+    # Apply PCA on training data (for grid search + final model)
+    print("\nApplying PCA on training data...")
+    pca = PCA(n_components=args.pca_components, random_state=args.random_state)
+    X_train_gs_pca = pca.fit_transform(X_train_gs)
+    explained = pca.explained_variance_ratio_.sum()
+    print(f"PCA complete. Shape: {X_train_gs_pca.shape}, explained variance: {explained:.2%}")
+
+    # Also transform full train + test sets with same PCA model
+    X_train_full_pca = pca.transform(X_train_full)
+    X_test_pca = pca.transform(X_test)
+
+    # Grid search on PCA-reduced training subset
     results, best_params, best_cv_score = grid_search_knn(
-        X_train, y_train, ks, weights_list, p_values,
+        X_train_gs_pca, y_train_gs, ks, weights_list, p_values,
         cv=args.cv, random_state=args.random_state
     )
 
-    # Save results table
+    # Save grid search results
     results_df = pd.DataFrame([
         {
             "k": r["k"],
@@ -232,20 +274,20 @@ def main():
     results_df.to_csv(csv_path, index=False)
     print(f"\nSaved grid search CSV to {csv_path}")
 
-    # Plot
+    # Plot grid search curves
     plot_path = os.path.join(args.output_dir, 'knn_grid_search_plot.png')
     plot_grid_results(results, plot_path)
 
-    # Train best model on full training data & evaluate on test
-    print("\nTraining best model on full training set and evaluating on test set...")
+    # Train best model on full PCA-reduced training set & evaluate on test
+    print("\nTraining best model on full PCA-reduced training set and evaluating on test set...")
     best_knn = KNNClassifier(
         n_neighbors=best_params["n_neighbors"],
         weights=best_params["weights"],
         p=best_params["p"],
     )
-    best_knn.fit(X_train, y_train)
-    y_pred_test = best_knn.predict(X_test)
-    test_acc = accuracy_score(y_test, y_pred_test)
+    best_knn.fit(X_train_full_pca, y_train_full.astype(int))
+    y_pred_test = best_knn.predict(X_test_pca).astype(int)
+    test_acc = accuracy_score(y_test.astype(int), y_pred_test)
 
     print("\nFINAL EVALUATION")
     print("-" * 70)
@@ -255,8 +297,9 @@ def main():
     print("-" * 70)
     print("Interpretation:")
     print("  • Use CV accuracy to justify chosen k / weights / distance metric.")
-    print("  • Use hold-out test accuracy to estimate generalization performance.\n")
-    print("All results saved in:", args.output_dir)
+    print("  • Use hold-out test accuracy to estimate generalization performance.")
+    print("  • Mention PCA + subsampling as practical choices for speed/memory.")
+    print(f"\nAll results saved in: {args.output_dir}")
     print("=" * 70)
 
 
