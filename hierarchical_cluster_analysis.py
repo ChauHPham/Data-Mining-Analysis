@@ -111,7 +111,7 @@ def apply_pca(X, n_components):
 
 
 # =========================================================
-# 4. Visualization (same style as friend)
+# 4. Visualization 
 # =========================================================
 def visualize_cluster(X_vis, labels, title, save_path, silhouette=None):
     dims = X_vis.shape[1]
