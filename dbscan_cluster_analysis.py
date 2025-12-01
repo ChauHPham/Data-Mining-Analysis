@@ -209,7 +209,7 @@ def main():
     plt.figure(figsize = (10, 6))
     plt.plot(silhouettes, "o-", color = "steelblue")
     plt.title("DBScan Clustering Silhouette Scores")
-    plt.xlabel("Number of Clusters (k)")
+    plt.xlabel("Epsilon Values")
     plt.ylabel("Silhouette Coefficient")
     plt.grid(alpha = 0.3)
     plt.savefig("dbscan_silhouette_scores.png", dpi = 300, bbox_inches = "tight")
