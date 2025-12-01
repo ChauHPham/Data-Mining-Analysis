@@ -162,6 +162,8 @@ python classification_analysis.py --feature-selection none
 python classification_analysis.py --n-estimators 50 --lasso-C 0.5 --max-depth 15
 ```
 
+---
+
 **Parameters:**
 - **`--feature-selection METHOD`**: Feature selection method: lasso or none (default: **lasso**)
 - **`--lasso-C FLOAT`**: Inverse regularization strength for Lasso (default: 0.1, smaller = more selective)
@@ -189,6 +191,148 @@ python classification_analysis.py --n-estimators 50 --lasso-C 0.5 --max-depth 15
 - `model_comparison.png`: **Side-by-side comparison of baseline vs tuned model**
 
 ---
+
+# **4. Hierarchical Clustering**
+
+Performs **Agglomerative Hierarchical Clustering** on PCA-reduced data and selects the best *k* using silhouette scores.
+
+### **Files**
+
+* `hierarchical_clustering.py`
+* `hierarchical_clustering_analysis.py` (notebook-style script)
+
+### **Quick Run**
+
+```bash
+python hierarchical_clustering_analysis.py
+```
+
+### **What it does**
+
+* Full preprocessing pipeline
+* Samples dataset (2,000 rows default)
+* PCA (50 components)
+* Tests k = 2…6
+* Computes silhouette scores
+* Produces a 2D PCA scatter plot of the best clustering
+
+### **Outputs**
+
+* `hierarchical_results/`
+
+  * `silhouette_scores.png`
+  * `hierarchical_k*_plot.png` (best k)
+  * Notebook-style printed analysis
+
+---
+
+# **5. Elliptic Envelope Outlier Detection**
+
+Uses **Mahalanobis-distance Elliptic Envelope** on PCA-reduced features to detect multivariate anomalies.
+
+### **File**
+
+* `elliptic_envelope.py`
+
+### **Quick Run**
+
+```bash
+python elliptic_envelope.py
+```
+
+### **What it does**
+
+* Full preprocessing pipeline
+* Samples 5,000 rows
+* PCA (50 components)
+* Fits custom Elliptic Envelope
+* Identifies top 5% anomalies
+* Visualizes outliers in 2D PCA
+
+### **Outputs**
+
+* `elliptic_outlier_plots/`
+
+  * `elliptic_outliers_pca.png`
+  * `elliptic_scores_hist.png`
+* Terminal summary: # of outliers, score ranges, PCA explained variance
+
+---
+
+# **6. k-NN Classification (Batched Implementation)**
+
+Custom k-NN classifier with **batched distance computation**, PCA-reduced features, and full evaluation.
+
+### **File**
+
+* `knn_classifier.py`
+
+### **Quick Run**
+
+```bash
+python knn_classifier.py
+```
+
+### **What it does**
+
+* Full preprocessing pipeline
+* PCA (50 components)
+* Train/test split (80/20)
+* Batched Euclidean distance KNN
+* Computes:
+
+  * Accuracy
+  * Precision
+  * Recall
+  * F1-score
+
+### **Outputs**
+
+* `knn_results/`
+
+  * `knn_confusion_matrix.png`
+  * `knn_pca_predictions.png`
+* Terminal performance summary (≈88% accuracy)
+
+---
+
+# **7. k-NN Grid Search (Manual CV Search)**
+
+Runs **manual grid search** for KNN hyperparameters using K-fold cross-validation on PCA features.
+
+### **File**
+
+* `knn_grid_search.py`
+
+### **Quick Run**
+
+```bash
+python knn_grid_search.py
+```
+
+### **What it does**
+
+* Full preprocessing pipeline
+* Train/test split
+* PCA (50 components)
+* Manual grid search over:
+
+  * k values
+  * weights (uniform / distance)
+  * Minkowski distance p
+* Evaluates best model on hold-out test set
+
+### **Outputs**
+
+* `knn_grid_results/`
+
+  * `knn_grid_search_plot.png`
+  * `knn_grid_results.csv`
+* Terminal output with:
+
+  * Best hyperparameters
+  * Mean CV accuracy
+  * Final test accuracy (~0.884)
 
 ## Installation
 
@@ -224,6 +368,66 @@ python classification_analysis.py
    - Classification confusion matrices: `confusion_matrix_*.png`
    - ROC curves with AUC: `roc_curve_*.png`
    - Cross-validation scores: `cv_scores.png`
+
+5. **Run Hierarchical Clustering**
+
+```bash
+python hierarchical_clustering.py
+# Samples 2,000 points, applies PCA (50), computes silhouette scores for k=2..6,
+# and generates clustering visualization + silhouette score plot.
+```
+
+**Outputs:**
+
+* `hierarchical_silhouette_scores.png`
+* `hierarchical_clusters_k*.png`
+* `hierarchical_best_clustering.png`
+
+---
+
+6. **Run Elliptic Envelope Outlier Detection**
+
+```bash
+python elliptic_envelope.py
+# Samples 5,000 points, applies PCA (50), detects ~5% anomalies,
+# and generates PCA scatter + score histogram.
+```
+
+**Outputs:**
+
+* `elliptic_outlier_plots/elliptic_outliers_pca.png`
+* `elliptic_outlier_plots/elliptic_scores_hist.png`
+
+---
+
+7. **Run k-NN Classifier (Batched + PCA)**
+
+```bash
+python knn_classifier.py
+# PCA (50), train/test split (80/20), batched distance computation,
+# prints Accuracy/Precision/Recall/F1 and saves confusion matrix + PCA prediction scatter.
+```
+
+**Outputs:**
+
+* `knn_results/knn_confusion_matrix.png`
+* `knn_results/knn_pca_predictions.png`
+
+---
+
+8. **Run k-NN Grid Search (Manual CV)**
+
+```bash
+python knn_grid_search.py
+# Manual grid search over k, weights, and p using PCA (50) + K-fold CV.
+# Saves accuracy vs k plot and evaluates best model on a final test set.
+```
+
+**Outputs:**
+
+* `knn_grid_results/knn_grid_results.csv`
+* `knn_grid_results/knn_grid_search_plot.png`
+* Terminal summary of best parameters and final test accuracy.
 
 ---
 

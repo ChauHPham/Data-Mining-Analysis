@@ -241,6 +241,239 @@ python classification_analysis.py \
 
 ---
 
+Here you go — **fully formatted RUN_INSTRUCTIONS** entries for your four scripts
+(**Hierarchical Clustering**, **Elliptic Envelope**, **k-NN Classifier**, and **k-NN Grid Search**)
+written *in the exact style and structure* of the examples you provided.
+
+You can paste these directly into `RUN_INSTRUCTIONS.md`.
+
+---
+
+# **4. Hierarchical Clustering**
+
+Performs **Agglomerative Hierarchical Clustering** using your custom `HierarchicalClustering` class with PCA dimensionality reduction.
+
+---
+
+## **Quick Test (Smaller sample size for speed)**
+
+```bash
+python hierarchical_clustering_analysis.py --sample-size 1000 --pca-components 30
+```
+
+## **Full Run (Default: 2,000 samples, 50 PCA components)**
+
+```bash
+python hierarchical_clustering_analysis.py
+```
+
+## **Custom Run**
+
+```bash
+python hierarchical_clustering_analysis.py \
+  --data data/diabetic_data.csv \
+  --sample-size 3000 \
+  --pca-components 50 \
+  --min-k 2 \
+  --max-k 6 \
+  --random-state 42
+```
+
+### **Parameters**
+
+* `--data`: Path to dataset (default: data/diabetic_data.csv)
+* `--sample-size`: Number of rows to sample for clustering (default: 2000)
+* `--pca-components`: Number of PCA components before clustering (default: 50)
+* `--min-k`: Minimum clusters tested (default: 2)
+* `--max-k`: Maximum clusters tested (default: 6)
+* `--random-state`: Seed for reproducibility (default: 42)
+
+### **Expected Output**
+
+* Silhouette scores for k=2…6
+* `hierarchical_silhouette_scores.png`
+* `hierarchical_clustering_k*.png` (best k)
+* 2D PCA cluster visualization
+
+### **Runtime**
+
+* ~20–40 seconds (default settings)
+
+---
+
+# **5. Elliptic Envelope Outlier Detection**
+
+Runs your custom **Mahalanobis Elliptic Envelope** model with PCA preprocessing and 2D visualizations.
+
+---
+
+## **Quick Test (Default: contamination=0.05, sample=5000)**
+
+```bash
+python elliptic_envelope.py
+```
+
+## **More Sensitive Detection (Higher contamination rate)**
+
+```bash
+python elliptic_envelope.py --contamination 0.10
+```
+
+## **Custom Run**
+
+```bash
+python elliptic_envelope.py \
+  --data data/diabetic_data.csv \
+  --contamination 0.03 \
+  --sample-size 4000 \
+  --pca-components 50 \
+  --output-dir elliptic_outlier_plots \
+  --random-state 42
+```
+
+### **Parameters**
+
+* `--data`: CSV path (default: data/diabetic_data.csv)
+* `--contamination`: Expected proportion of anomalies (default: 0.05)
+* `--sample-size`: Number of rows to sample (default: 5000)
+* `--pca-components`: PCA components before envelope fitting (default: 50)
+* `--output-dir`: Where to save plots
+* `--random-state`: Random seed
+
+### **Expected Output**
+
+* Console summary of:
+
+  * Outlier count
+  * Score ranges
+  * Explained variance from PCA
+* `elliptic_outliers_pca.png`
+* `elliptic_scores_hist.png`
+
+### **Runtime**
+
+* ~20–30 seconds
+
+---
+
+# **6. k-NN Classifier (with PCA + Batched KNN)**
+
+Runs your custom **memory-safe batched KNN classifier** with 50-dim PCA preprocessing.
+
+---
+
+## **Quick Test (Default settings: k=5, Euclidean, uniform)**
+
+```bash
+python knn_classifier.py
+```
+
+## **Try Manhattan Distance**
+
+```bash
+python knn_classifier.py --p 1
+```
+
+## **Weighted Distance Voting**
+
+```bash
+python knn_classifier.py --weights distance
+```
+
+## **Custom Run**
+
+```bash
+python knn_classifier.py \
+  --data data/diabetic_data.csv \
+  --test-size 0.2 \
+  --n-neighbors 7 \
+  --weights uniform \
+  --p 2 \
+  --output-dir knn_results \
+  --random-state 42
+```
+
+### **Parameters**
+
+* `--data`: CSV path (default: data/diabetic_data.csv)
+* `--test-size`: Test split proportion (default: 0.2)
+* `--n-neighbors`: Number of neighbors (default: 5)
+* `--weights`: `uniform` or `distance`
+* `--p`: Minkowski p → `1` (Manhattan) or `2` (Euclidean)
+* `--output-dir`: Save figures
+* `--random-state`: Random seed
+
+### **Expected Output**
+
+* Accuracy, precision, recall, F1
+* `knn_confusion_matrix.png`
+* `knn_pca_predictions.png`
+
+### **Runtime**
+
+* ~1–2 minutes
+
+---
+
+# **7. k-NN Grid Search (K-fold CV on PCA space)**
+
+Performs manual **grid search** over k, weights, and p with cross-validation on a PCA-reduced training subset.
+
+---
+
+## **Quick Test (k=3,5,7; cv=3; PCA=50)**
+
+```bash
+python knn_grid_search.py
+```
+
+## **Try Manhattan Distance as well**
+
+```bash
+python knn_grid_search.py --p-values 1,2
+```
+
+## **Custom Run**
+
+```bash
+python knn_grid_search.py \
+  --data data/diabetic_data.csv \
+  --k-range 3,5,7,9 \
+  --weights uniform,distance \
+  --p-values 2 \
+  --cv 5 \
+  --pca-components 50 \
+  --max-train-samples 60000 \
+  --output-dir knn_grid_results \
+  --random-state 42
+```
+
+### **Parameters**
+
+* `--k-range`: List of k values (default: 3,5,7)
+* `--weights`: `uniform` or `distance`
+* `--p-values`: 1 or 2
+* `--cv`: Number of folds (default: 3)
+* `--pca-components`: PCA dim before grid search (default: 50)
+* `--max-train-samples`: Cap training samples for speed
+* `--output-dir`: Save CSV + plot
+* `--random-state`: Random seed
+
+### **Expected Output**
+
+* Mean CV accuracies for each hyperparameter combination
+* Best parameters + CV score
+* Final test accuracy
+* `knn_grid_results.csv`
+* `knn_grid_search_plot.png`
+
+### **Runtime**
+
+* ~2–5 minutes depending on max-train-samples
+
+---
+
+
 ## Quick Verification
 
 ### Test if imports work:
