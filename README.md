@@ -192,7 +192,24 @@ python classification_analysis.py --n-estimators 50 --lasso-C 0.5 --max-depth 15
 
 ---
 
-# **4. Hierarchical Clustering**
+# **4. Lasso Regression**
+
+L1-regularized linear regression for feature selection and regularization.
+
+**Key Features:**
+- ✓ L1 regularization for automatic feature selection
+- ✓ Embedded feature selection method
+- ✓ Configurable regularization strength (C parameter)
+
+**Usage:**
+Used as feature selection in Classification Analysis (see section 3). Reduces 2,389 features to top N selected features.
+
+**Parameters:**
+- `--lasso-C FLOAT`: Inverse regularization strength (default: 0.1, smaller = more selective)
+
+---
+
+# **5. Hierarchical Clustering**
 
 Performs **Agglomerative Hierarchical Clustering** on PCA-reduced data and selects the best *k* using silhouette scores.
 
@@ -226,7 +243,7 @@ python hierarchical_clustering_analysis.py
 
 ---
 
-# **5. Elliptic Envelope Outlier Detection**
+# **6. Elliptic Envelope Outlier Detection**
 
 Uses **Mahalanobis-distance Elliptic Envelope** on PCA-reduced features to detect multivariate anomalies.
 
@@ -259,7 +276,7 @@ python elliptic_envelope.py
 
 ---
 
-# **6. k-NN Classification (Batched Implementation)**
+# **7. k-NN Classification (Batched Implementation)**
 
 Custom k-NN classifier with **batched distance computation**, PCA-reduced features, and full evaluation.
 
@@ -296,7 +313,7 @@ python knn_classifier.py
 
 ---
 
-# **7. k-NN Grid Search (Manual CV Search)**
+# **8. k-NN Grid Search (Manual CV Search)**
 
 Runs **manual grid search** for KNN hyperparameters using K-fold cross-validation on PCA features.
 
