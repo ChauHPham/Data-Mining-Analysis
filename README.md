@@ -419,7 +419,6 @@ python svm_classifier.py
 * Data preprocessed and loaded 
 * Visualizes hyperplane in 2D PCA plot 
 * Evaluation metric (accuracy, precision, recall, f-score) support
-* 
 
 ### **Outputs**
 
