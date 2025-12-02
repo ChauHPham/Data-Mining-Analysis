@@ -15,6 +15,7 @@ import matplotlib
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
+from sklearn.neighbors import NearestNeighbors
 import argparse
 
 from dbscan_clustering import DBScan
@@ -110,13 +111,23 @@ def visualize_cluster(X_vis, clustering, title, save_path, silhouette_score = No
 
     if num_dims == 2: #2D Visualization
         plt.figure(figsize = (10, 8))
-        for i, cid in enumerate(unique_clusters):
+        
+        # Plot noise points first (if any)
+        if 0 in unique_clusters:
+            noise_mask = clustering == 0
+            plt.scatter(X_vis[noise_mask, 0], X_vis[noise_mask, 1],
+                        s = 30, alpha = 0.5, color = "gray", 
+                        marker = "x", linewidths = 0.5, label = "Noise")
+        
+        # Plot actual clusters (excluding noise)
+        cluster_ids = [cid for cid in unique_clusters if cid != 0]
+        for i, cid in enumerate(cluster_ids):
             mask = clustering == cid
-            c_value = i / max(num_clusters - 1, 1) if num_clusters > 1 else 0
+            c_value = i / max(len(cluster_ids) - 1, 1) if len(cluster_ids) > 1 else 0
             color = cmap(c_value)
             plt.scatter(X_vis[mask, 0], X_vis[mask, 1],
                         s = 20, alpha = 0.6, color = color, edgecolors = "black",
-                        linewidths = 0.5, label = f"Cluster {cid}")
+                        linewidths = 0.5, label = f"Cluster {int(cid)}")
 
         # Add sihouette score to title 
         if silhouette_score is not None:
@@ -135,9 +146,18 @@ def visualize_cluster(X_vis, clustering, title, save_path, silhouette_score = No
         fig = plt.figure(figsize = (12, 9))
         ax = fig.add_subplot(111, projection = '3d')
 
-        for i, cid in enumerate(unique_clusters):
+        # Plot noise points first (if any)
+        if 0 in unique_clusters:
+            noise_mask = clustering == 0
+            ax.scatter(X_vis[noise_mask, 0], X_vis[noise_mask, 1], X_vis[noise_mask, 2],
+                       s = 30, alpha = 0.5, color = "gray",
+                       marker = "x", linewidths = 0.5, label = "Noise")
+        
+        # Plot actual clusters (excluding noise)
+        cluster_ids = [cid for cid in unique_clusters if cid != 0]
+        for i, cid in enumerate(cluster_ids):
             mask = clustering == cid
-            c_value = i / max(num_clusters - 1, 1) if num_clusters > 1 else 0
+            c_value = i / max(len(cluster_ids) - 1, 1) if len(cluster_ids) > 1 else 0
             color = cmap(c_value)
             ax.scatter(X_vis[mask, 0], X_vis[mask, 1], X_vis[mask, 2],
                        s = 20, alpha = 0.6, color = color, edgecolors = "black",
@@ -177,61 +197,139 @@ def main():
     # Apply PCA to reduce dimensions of data
     X_pca = apply_pca(X, args.pca_components)
 
+    # Find appropriate epsilon using k-distance graph
+    print("\nFinding appropriate epsilon using k-distance graph...")
+    minPts = 5
+    neighbors = NearestNeighbors(n_neighbors=minPts)
+    neighbors_fit = neighbors.fit(X_pca)
+    distances, indices = neighbors_fit.kneighbors(X_pca)
+    
+    # Sort distances to k-th nearest neighbor
+    k_distances = np.sort(distances[:, minPts-1])
+    
+    # Use percentiles to suggest epsilon values
+    eps_25 = np.percentile(k_distances, 25)
+    eps_50 = np.percentile(k_distances, 50)
+    eps_75 = np.percentile(k_distances, 75)
+    eps_90 = np.percentile(k_distances, 90)
+    
+    print(f"k-distance statistics (k={minPts}):")
+    print(f"  25th percentile: {eps_25:.4f}")
+    print(f"  50th percentile: {eps_50:.4f}")
+    print(f"  75th percentile: {eps_75:.4f}")
+    print(f"  90th percentile: {eps_90:.4f}")
+    
+    # Test multiple epsilon values around the suggested range
+    eps_values = [eps_25, eps_50, eps_75, eps_90, eps_90 * 1.5, eps_90 * 2.0]
+    
     silhouettes = []
+    eps_results = []
     best_score = -1
     best_clustering = None
+    best_eps = None
 
-    print("Cluster Analysis: Testing DBScan Clustering")
+    print("\nCluster Analysis: Testing DBScan Clustering with different epsilon values")
+    print("=" * 80)
 
-    # Performs DBScan on sample data points
-    db = DBScan(0.2, 5) # choice of epsilon and minimum points in neighbourhood
-    clustering = db.fit(X_pca)
+    for eps in eps_values:
+        db = DBScan(eps, minPts)
+        clustering = db.fit(X_pca)
+        
+        unique_labels = np.unique(clustering)
+        n_clusters = len(unique_labels[unique_labels != 0])
+        n_noise = np.sum(clustering == 0)
+        
+        # Get silhouette score (only if we have more than 1 cluster)
+        if n_clusters > 1:
+            # Filter to only non-noise points
+            mask = clustering != 0
+            if np.sum(mask) > 1:
+                # Check if all clusters have at least 2 points
+                valid_clusters = [l for l in unique_labels if l != 0 and np.sum(clustering == l) >= 2]
+                if len(valid_clusters) > 1:
+                    mask = np.isin(clustering, valid_clusters)
+                    sil = silhouette_score(X_pca[mask], clustering[mask])
+                else:
+                    sil = -1
+            else:
+                sil = -1
+        else:
+            sil = -1
+        
+        silhouettes.append(sil)
+        eps_results.append({'eps': eps, 'n_clusters': n_clusters, 'n_noise': n_noise, 'silhouette': sil})
+        
+        status = "✓" if n_clusters > 0 else "✗"
+        print(f"{status} eps={eps:6.4f}: {n_clusters:2d} clusters, {n_noise:4d} noise, silhouette={sil:7.4f}")
+        
+        if sil > best_score and n_clusters > 0:
+            best_score = sil
+            best_clustering = clustering.copy()
+            best_eps = eps
 
-    # Get silhouette score (only if we have more than 1 cluster and at least 2 samples per cluster)
-    unique_labels = np.unique(clustering)
-    if len(unique_labels) > 1 and all(np.sum(clustering == label) > 1 for label in unique_labels if label != 0):
-        sil = silhouette_score(X_pca, clustering)
-    else:
-        sil = -1
-        print("Warning: Cannot compute silhouette score - need at least 2 clusters with 2+ samples each")
-    silhouettes.append(sil)
-    print(f"Silhouette = {sil:.4f}")
+    print("=" * 80)
+    
+    # If no valid clustering found, use the one with most clusters
+    if best_clustering is None:
+        print("\nWarning: No clustering with valid silhouette score found!")
+        print("Using clustering with most clusters...")
+        max_clusters_idx = max(range(len(eps_results)), key=lambda i: eps_results[i]['n_clusters'])
+        best_eps = eps_values[max_clusters_idx]
+        db = DBScan(best_eps, minPts)
+        best_clustering = db.fit(X_pca)
+        best_score = silhouettes[max_clusters_idx]
+    
+    unique_labels = np.unique(best_clustering)
+    n_clusters = len(unique_labels[unique_labels != 0])
+    n_noise = np.sum(best_clustering == 0)
+    
+    print(f"\nBest result: eps={best_eps:.4f}")
+    print(f"  Clusters: {n_clusters}")
+    print(f"  Noise points: {n_noise}")
+    if best_score > -1:
+        print(f"  Silhouette score: {best_score:.4f}")
 
-    if sil > best_score:
-        best_score = sil
-        best_clustering = clustering.copy()
 
-    # Print results summary
-    print("\nSummary of Results:")
-    for idx, sil in enumerate(silhouettes):
-        marker = " <-- Best" if idx == 0 else ""
-        print(f"Silhouette = {sil:.4f}{marker}")
-
-
-    print("Generating visualizations...")
+    print("\nGenerating visualizations...")
 
     print("Generating Silhouette Score Plot...")
-    plt.figure(figsize = (10, 6))
-    plt.plot(silhouettes, "o-", color = "steelblue")
-    plt.title("DBScan Clustering Silhouette Scores")
-    plt.xlabel("Epsilon Values")
-    plt.ylabel("Silhouette Coefficient")
+    plt.figure(figsize = (12, 6))
+    plt.subplot(1, 2, 1)
+    plt.plot(k_distances, linewidth=1)
+    plt.axhline(y=best_eps, color='red', linestyle='--', linewidth=2, label=f'Selected ε={best_eps:.4f}')
+    plt.title("k-Distance Graph", fontsize=12, fontweight='bold')
+    plt.xlabel("Points sorted by distance", fontsize=10)
+    plt.ylabel(f"Distance to {minPts}-th nearest neighbor", fontsize=10)
+    plt.legend()
+    plt.grid(alpha=0.3)
+    
+    plt.subplot(1, 2, 2)
+    eps_labels = [f"{eps:.3f}" for eps in eps_values]
+    plt.plot(range(len(eps_values)), silhouettes, "o-", color = "steelblue", linewidth=2, markersize=8)
+    if best_eps is not None:
+        best_idx = eps_values.index(best_eps)
+        plt.axvline(x=best_idx, color='red', linestyle='--', linewidth=2, alpha=0.7)
+    plt.xticks(range(len(eps_values)), eps_labels, rotation=45)
+    plt.title("Silhouette Scores vs Epsilon", fontsize=12, fontweight='bold')
+    plt.xlabel("Epsilon (ε) Value", fontsize=10)
+    plt.ylabel("Silhouette Coefficient", fontsize=10)
     plt.grid(alpha = 0.3)
+    
+    plt.tight_layout()
     plt.savefig("dbscan_silhouette_scores.png", dpi = 300, bbox_inches = "tight")
     plt.close()
-    print("\nSaved as dbscan_silhouette_scores.png.")
+    print("Saved as dbscan_silhouette_scores.png.")
 
     # Reduce dataset for 2D and 3D Visualization 
     print(f"\nReducing to {args.vis_dims}D for visualization...")
     X_vis = PCA(n_components=args.vis_dims).fit_transform(X)
 
     print(f"\nVisualizing clusters...")
-    vis_title = f"DBScan Clustering"
+    vis_title = f"DBScan Clustering (eps={best_eps:.4f}, minPts={minPts})"
     vis_file = f"dbscan.png"
 
     # Produce scatter plot for clustering
-    # visualize_cluster(X_vis, best_clustering, vis_title, vis_file, silhouette=best_score)
-    visualize_cluster(X_vis, best_clustering, vis_title, vis_file)
+    visualize_cluster(X_vis, best_clustering, vis_title, vis_file, silhouette_score=best_score if best_score > -1 else None)
     print(f"Saved scatterplot as {vis_file}.")
     print("DBScan clustering analysis complete!")
     print("\n Files saved:")
