@@ -187,8 +187,13 @@ def main():
     db = DBScan(0.2, 5) # choice of epsilon and minimum points in neighbourhood
     clustering = db.fit(X_pca)
 
-    # Get silhouette score
-    sil = silhouette_score(X_pca, clustering)
+    # Get silhouette score (only if we have more than 1 cluster and at least 2 samples per cluster)
+    unique_labels = np.unique(clustering)
+    if len(unique_labels) > 1 and all(np.sum(clustering == label) > 1 for label in unique_labels if label != 0):
+        sil = silhouette_score(X_pca, clustering)
+    else:
+        sil = -1
+        print("Warning: Cannot compute silhouette score - need at least 2 clusters with 2+ samples each")
     silhouettes.append(sil)
     print(f"Silhouette = {sil:.4f}")
 
@@ -198,8 +203,8 @@ def main():
 
     # Print results summary
     print("\nSummary of Results:")
-    for sil in zip(silhouettes):
-        marker = " <-- Best" 
+    for idx, sil in enumerate(silhouettes):
+        marker = " <-- Best" if idx == 0 else ""
         print(f"Silhouette = {sil:.4f}{marker}")
 
 

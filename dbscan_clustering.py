@@ -21,11 +21,7 @@ class DBScan:
         """
         Compute euclidean distance between 2 points P1 and P2 in neighbourhood
         """
-        P1_sq = np.sum(P1 ** 2, axis = 1).reshape(-1, 1)
-        P2_sq = np.sum(P2 ** 2, axis = 0)
-        dist_sq = P1_sq + P2_sq - 2 * P1 @ P1.T 
-        dist_sq = np.maximum(dist_sq, 0.0)
-        return np.sqrt(dist_sq)
+        return np.sqrt(np.sum((P1 - P2) ** 2))
     
     def fit(self, X: np.ndarray):
         """
@@ -36,49 +32,61 @@ class DBScan:
                   0 indicates that it is a noise point 
         """
         n_samples = X.shape[0]
-        cid = 0 # current cluster/core pt 
-        clusters = []
-        labels = np.zeros(n_samples) - 1 
+        cid = 0 # current cluster ID
+        labels = np.zeros(n_samples) - 1  # -1 means unvisited
         
 
         # Iterate through every point and assign as core pt, border pt or noise pt
         for i in range(0, n_samples):
-            # Start with no points scanned
-            if labels[i] == -1:
-                # Find neighbours of current point within epsilon radius
-                neighbours = self.getNeighbours(X, i)
-                if len(neighbours) < self.minPts: # Neighbouring pts are scattered 
-                    labels[i] = 0 # set as noise pt
-                else: # if current point is core pt 
-                    cid = cid + 1 
-                    labels[i] = cid
-                    clusters.append(i)
-                    for neighbor in neighbours:
-                        if labels[neighbor] == -1: # Neighbouring point has not been labelled
-                            labels[neighbor] = cid
-                            prev_cid = cid - 1 
-                            clusters[prev_cid] = neighbor
-                            add_neighbours = self.getNeighbours(X, neighbor)
-                            if len(add_neighbours) >= self.minPts: 
-                                neighbours = neighbours + add_neighbours # add new neighbours to cluster
-                        elif labels[neighbor] == 0: # Neighbouring points is noise 
-                            labels[neighbor] = cid
-                            prev_cid = cid - 1 
-                            clusters[prev_cid] = neighbor
+            # Skip if already processed
+            if labels[i] != -1:
+                continue
+                
+            # Find neighbours of current point within epsilon radius
+            neighbours = self.getNeighbours(X, i)
+            
+            if len(neighbours) < self.minPts: # Neighbouring pts are scattered 
+                labels[i] = 0 # set as noise pt
+            else: # if current point is core pt 
+                cid = cid + 1 
+                labels[i] = cid
+                
+                # Expand cluster using a queue
+                seed_set = list(neighbours)
+                j = 0
+                while j < len(seed_set):
+                    q = seed_set[j]
+                    
+                    if labels[q] == 0:  # Change noise to border point
+                        labels[q] = cid
+                    elif labels[q] == -1:  # Unvisited point
+                        labels[q] = cid
+                        # Check if q is also a core point
+                        q_neighbours = self.getNeighbours(X, q)
+                        if len(q_neighbours) >= self.minPts:
+                            # Add new neighbours to seed set
+                            for n in q_neighbours:
+                                if labels[n] == -1 or labels[n] == 0:
+                                    if n not in seed_set:
+                                        seed_set.append(n)
+                    j += 1
 
         self.labels = labels
-        self.n_clusters = clusters 
-        return clusters 
+        self.n_clusters = cid  # Number of clusters found
+        return labels 
     
-    def getNeighbours(self, X: np.ndarray, pt: np.ndarray):
-        # Add: check for uniqueness of each neighbouring point
+    def getNeighbours(self, X: np.ndarray, pt_idx: int):
+        """
+        Find all neighbours of point at index pt_idx within eps radius
+        """
         neighbours = []
         n_samples = X.shape[0]
+        pt = X[pt_idx]
         for i in range(0, n_samples):
-            dist = self.euclidean_distance(X, pt)
-        if dist.all() <= self.eps: # if other pt is in radius
-            neighbours.append(i) # add to potential cluster
-
+            if i != pt_idx:  # Don't include the point itself
+                dist = self.euclidean_distance(X[i], pt)
+                if dist <= self.eps:  # if other pt is in radius
+                    neighbours.append(i)  # add to potential cluster
         return neighbours 
 
 
