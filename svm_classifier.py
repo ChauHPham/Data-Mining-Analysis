@@ -203,7 +203,7 @@ def main():
     # PCA visualization
     save_file = f"svm_pca.png"
     plot_svm(X_test, y_test, label_pred, save_file)
-    print("Results saved as ", args.output_dir)
+    print("Results saved as ", save_file)
     print("=" * 70)
 
 if __name__ == '__main__':

@@ -351,6 +351,81 @@ python knn_grid_search.py
   * Mean CV accuracy
   * Final test accuracy (~0.884)
 
+---
+
+## **9. DBScan Clustering**
+
+Performs **Density-based Clustering** on the PCA-reduced diabetic patient dataset.
+
+### **Files**
+
+* `dbscan_clustering.py`: custom implementation of DBScan
+* `dbscan_cluster_analysis.py`: Script that runs and visualizes the clustering. 
+
+### **Input Parameters** 
+
+* `--data`: Path to CSV dataset (default path set to: data/diabetic_data.csv)
+* `--pca-components N`: number of PCA components for clustering (default set to: 50)
+* `--vis-dims`: 2D or 3D scatter plot visualization (default set to: 2)
+* `--sample-size`: Limit number of dataset samples for DBScan running time (default set to: 1000)
+* `--random-seed`: Random seed for reproducibility (default set to: 42)
+
+### **Quick Run**
+
+```bash
+python dbscan_cluster_analysis.py
+```
+
+### **Features**
+
+* Data preprocessed and loaded 
+* Takes representative sample of dataset (1000)
+* Dimensionality reduced PCA dataset 
+* Computes and visualizes silhouette score of clusters 
+* Supports a 2D/3D scatterplot of clusterings 
+
+### **Outputs**
+
+* `dbscan.png`
+* `dbscan_silhouette_scores.png` 
+
+---
+
+## **10. Support Vector Machine (SVM) Classifier**
+
+Performs **Soft SVM Classification** on the diabetic patient datset with test/train split and evaluation metrics.
+
+### **Files**
+
+* `svm_classifier.py`
+
+### **Input Parameters**
+
+* `--data`: Path to CSV dataset (default path set to: data/diabetic_data.csv)
+* `--test-size`: Test/train split ratio (default set to: 0.2)
+* `--alpha`: Learning rate of classifier (default set to: 0.001)
+* `--lmda`: Margin size trade-off of hyperplane (default set to: 0.01)
+* `--iterations`: Number of iterations to train classifier(default set to: 100)
+* `--random-state`: Random seed for reproducibility (default set to: 42)
+
+### **Quick Run**
+
+```bash
+python svm_classifier.py
+```
+
+### **Features**
+
+* Data preprocessed and loaded 
+* Visualizes hyperplane in 2D PCA plot 
+* Evaluation metric (accuracy, precision, recall, f-score) support
+* 
+
+### **Outputs**
+
+* `svm_pca.png`
+
+
 ## Installation
 
 ```bash
@@ -445,6 +520,31 @@ python knn_grid_search.py
 * `knn_grid_results/knn_grid_results.csv`
 * `knn_grid_results/knn_grid_search_plot.png`
 * Terminal summary of best parameters and final test accuracy.
+
+---
+
+9. **Run DBScan Clustering**
+
+```bash
+python dbscan_cluster_analysis.py
+# PCA(50) components, samples 1000 points and generates silhouette score and scatter plot
+```
+
+**Outputs:**
+
+* `dbscan.png`
+* `dbscan_silhouette_scores.png` 
+
+10. **Run SVM Classifier**
+
+```bash
+python svm_classifier.py
+# Performs on train/test split of (80/20), evaluates classification accuracy/precison/recall/f-score
+```
+
+**Outputs:**
+
+* `svm_pca.png`
 
 ---
 
