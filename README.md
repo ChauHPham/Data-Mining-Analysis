@@ -8,6 +8,39 @@ This project analyzes diabetic patient data using clustering and classification 
 
 The dataset (`data/diabetic_data.csv`) contains information about diabetic patients, including features such as patient demographics, medical history, medications, and readmission status.
 
+## Running Jupyter Notebooks
+
+**Important:** If you want to run any Jupyter notebooks, please **copy them to the main directory first**. Notebooks in subdirectories may encounter path issues when trying to import modules or access data files.
+
+### Notebook Organization
+
+The project notebooks are organized into the following directories:
+
+- **`Cluster Analysis Notebooks/`** - Clustering algorithms:
+  - `kmeans_pca_silhouette_notebook.ipynb` - K-Means clustering
+  - `hierarchical_clustering.ipynb` - Hierarchical clustering
+  - `dbscan_clustering.ipynb` - DBSCAN clustering
+
+- **`Outlier Detection Notebooks/`** - Outlier detection methods:
+  - `isolation_forest_notebook.ipynb` - Isolation Forest
+  - `local_outlier_factor_notebook.ipynb` - Local Outlier Factor (LOF)
+  - `elliptic_envelope_notebook.ipynb` - Elliptic Envelope
+
+- **`Classifier Notebooks/`** - Classification algorithms:
+  - `random_forest_randomsearch_notebook.ipynb` - Random Forest
+  - `knn_classifier_notebook.ipynb` - k-NN classifier
+  - `svm_classifier.ipynb` - Support Vector Machine
+
+- **`Feature Selection Notebooks/`** - Feature selection:
+  - `lasso_feature_selection_notebook.ipynb` - Lasso feature selection
+
+- **`Hyperparameter Notebooks/`** - Hyperparameter tuning:
+  - `knn_grid_search_notebook.ipynb` - k-NN grid search
+  - `random_forest_randomsearch_notebook.ipynb` - Random Forest tuning
+  - `svm_random_search_notebook.ipynb` - SVM random search tuning
+
+**Note:** The main project scripts (`.py` files) are located in the root directory and can be run directly without moving files.
+
 ## Report
 
 Report detailing the methodology of the project and any analysis and findings obtained attached as report.pdf
