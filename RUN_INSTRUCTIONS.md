@@ -471,6 +471,95 @@ python knn_grid_search.py \
 
 * ~2–5 minutes depending on max-train-samples
 
+
+---
+
+# 8. **SVM Classifier (with PCA + SVM Wrapper)**
+
+Runs the main SVM classifier used in the project.
+
+### Quick Run (recommended)
+
+```bash
+python svm_classifier.py
+```
+
+### Adjust Kernel or PCA Components
+
+```bash
+python svm_classifier.py --kernel linear
+python svm_classifier.py --pca-components 30
+```
+
+### Custom Run
+
+```bash
+python svm_classifier.py \
+  --kernel rbf \
+  --C 1.0 \
+  --gamma scale \
+  --degree 3 \
+  --pca-components 20
+```
+
+**Output:**
+
+* Accuracy, precision, recall, F1-score
+* Confusion matrix (`svm_results/`)
+* PCA scatter plot of predictions
+
+**Runtime:** ~5 minutes (training dominates)
+
+---
+
+# 9. **SVM Random Search (Manual Hyperparameter Search)**
+
+A fully manual random search with optional **fast mode**.
+
+### FAST MODE (recommended — ~10–20 seconds)
+
+```bash
+python svm_random_search.py --fast
+```
+
+Fast mode automatically:
+
+* Uses **linear kernel only**
+* PCA = **10** components
+* Subsamples **8,000** rows
+* Runs **2** random trials
+* CV = **2** folds
+
+### FULL RANDOM SEARCH (10 trials, all kernels — slow)
+
+```bash
+python svm_random_search.py
+```
+
+### Custom Run
+
+```bash
+python svm_random_search.py \
+  --iterations 20 \
+  --cv 3 \
+  --pca-components 50 \
+  --max-train-samples 30000
+```
+
+**Output:**
+
+* Table of random trial CV results
+* Best hyperparameters
+* Final test accuracy
+* Results CSV saved to `svm_random_results/`
+
+**Runtime:**
+
+* Fast mode: **10–20 seconds**
+* Full mode: **20–40 minutes**
+
+
+
 ---
 
 
@@ -495,7 +584,6 @@ python outlier_detection.py --contamination 0.005
 ```bash
 python classification_analysis.py --n-estimators 5 --cv-folds 3
 ```
-
 ---
 
 ## Troubleshooting

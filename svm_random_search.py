@@ -2,8 +2,7 @@
 Manual Random Search for SVM Hyperparameters
 CMPT 459 Course Project
 
-Randomly samples hyperparameter combinations and evaluates each
-via K-fold cross-validation on PCA-transformed data.
+FAST MODE included — drastically reduces runtime.
 """
 
 import argparse
@@ -16,11 +15,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.decomposition import PCA
 from sklearn.metrics import accuracy_score
 
-from svm_classifier import SVMClassifier
+from svm_classifier import SVMClassifier  # your custom class
 
 
 # ============================================================
-#                PREPROCESSING (same as before)
+# PREPROCESSING
 # ============================================================
 
 def load_and_preprocess_data(path):
@@ -28,18 +27,14 @@ def load_and_preprocess_data(path):
     df = pd.read_csv(path)
     df = df.replace("?", np.nan)
 
-    # Drop columns with >40% missing
     threshold = 0.4 * len(df)
     df = df.dropna(thresh=threshold, axis=1)
 
-    # Fill categorical missing
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].fillna("Unknown")
 
-    # Encode target
     df["readmitted"] = df["readmitted"].map({"NO": 0, ">30": 1, "<30": 2})
 
-    # Encode categoricals
     cat_cols = df.select_dtypes(include="object").columns
     le = LabelEncoder()
     for col in cat_cols:
@@ -48,12 +43,10 @@ def load_and_preprocess_data(path):
         else:
             df = pd.get_dummies(df, columns=[col], drop_first=True)
 
-    # Remove ID columns
     for col in ["encounter_id", "patient_nbr"]:
         if col in df.columns:
             df = df.drop(columns=[col])
 
-    # Scale numeric
     num_cols = df.select_dtypes(include=["int64", "float64"]).columns
     df[num_cols] = StandardScaler().fit_transform(df[num_cols])
 
@@ -65,7 +58,7 @@ def load_and_preprocess_data(path):
 
 
 # ============================================================
-#                   K-FOLD SPLITTING
+# K-FOLD SPLIT
 # ============================================================
 
 def kfold_split(n_samples, cv, shuffle=True, random_state=42):
@@ -73,19 +66,20 @@ def kfold_split(n_samples, cv, shuffle=True, random_state=42):
     if shuffle:
         rng = np.random.default_rng(random_state)
         rng.shuffle(idx)
-    folds = np.array_split(idx, cv)
 
+    folds = np.array_split(idx, cv)
     splits = []
+
     for i in range(cv):
         val_idx = folds[i]
-        train_idx = np.concatenate(folds[:i] + folds[i+1:])
+        train_idx = np.concatenate([folds[j] for j in range(cv) if j != i])
         splits.append((train_idx, val_idx))
 
     return splits
 
 
 # ============================================================
-#                   RANDOM SEARCH IMPLEMENTATION
+# RANDOM SEARCH
 # ============================================================
 
 def random_search_svm(X, y, search_space, n_iter=10, cv=3, random_state=42):
@@ -110,8 +104,6 @@ def random_search_svm(X, y, search_space, n_iter=10, cv=3, random_state=42):
         }
 
         cv_scores = []
-
-        # Perform CV
         for train_idx, val_idx in splits:
             clf = SVMClassifier(
                 kernel=params["kernel"],
@@ -122,7 +114,8 @@ def random_search_svm(X, y, search_space, n_iter=10, cv=3, random_state=42):
             )
             clf.fit(X[train_idx], y[train_idx])
             y_pred = clf.predict(X[val_idx])
-            cv_scores.append(accuracy_score(y[val_idx], y_pred))
+            acc = accuracy_score(y[val_idx], y_pred)
+            cv_scores.append(acc)
 
         mean_acc = float(np.mean(cv_scores))
 
@@ -146,12 +139,11 @@ def random_search_svm(X, y, search_space, n_iter=10, cv=3, random_state=42):
 
 
 # ============================================================
-#                         ARGPARSE
+# ARGPARSE
 # ============================================================
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Manual Random Search for SVM")
-
     parser.add_argument("--data", type=str, default="data/diabetic_data.csv")
     parser.add_argument("--test-size", type=float, default=0.2)
     parser.add_argument("--cv", type=int, default=3)
@@ -159,21 +151,14 @@ def parse_args():
     parser.add_argument("--pca-components", type=int, default=50)
     parser.add_argument("--max-train-samples", type=int, default=30000)
     parser.add_argument("--output-dir", type=str, default="svm_random_results")
-    parser.add_argument("--random-state", type=int, default=42)
-
-    # Kernel override
-    parser.add_argument("--kernel-only", type=str, default=None,
-                        help="Force random search to use only this kernel.")
-
-    # Fast mode
     parser.add_argument("--fast-mode", action="store_true",
-                        help="Enable ultra-fast debug mode.")
-
+                        help="Enable drastically reduced runtime.")
+    parser.add_argument("--random-state", type=int, default=42)
     return parser.parse_args()
 
 
 # ============================================================
-#                            MAIN
+# MAIN
 # ============================================================
 
 def main():
@@ -185,15 +170,6 @@ def main():
     print("          MANUAL RANDOM SEARCH — SVM CLASSIFIER")
     print("=" * 70)
 
-    # FAST MODE OVERRIDES
-    if args.fast_mode:
-        print("\n⚡ FAST MODE ENABLED — drastically reducing runtime.\n")
-        args.pca_components = 10
-        args.max_train_samples = 4000
-        args.cv = 1
-        args.iterations = 2
-        args.kernel_only = "linear"
-
     # Load data
     X, y = load_and_preprocess_data(args.data)
 
@@ -203,7 +179,15 @@ def main():
         random_state=args.random_state, stratify=y
     )
 
-    # Optional subsampling
+    # FAST MODE OVERRIDES
+    if args.fast_mode:
+        print("\n⚡ FAST MODE ENABLED — drastically reducing runtime.")
+        args.max_train_samples = 2000
+        args.pca_components = 10
+        args.iterations = 2
+        args.cv = 2
+
+    # Subsampling
     if len(X_train_full) > args.max_train_samples:
         rng = np.random.default_rng(args.random_state)
         idx = rng.choice(len(X_train_full), args.max_train_samples, replace=False)
@@ -221,18 +205,16 @@ def main():
     X_test_pca = pca.transform(X_test)
     print("PCA complete.")
 
-    # Define random search space
+    # FAST MODE: force linear kernel
     search_space = {
-        "kernel": ["linear", "rbf", "sigmoid", "poly"],
+        "kernel": ["linear"],
         "C": (0.01, 10),
         "gamma": ["scale", "auto"],
         "degree": [2, 3, 4],
     }
 
-    # Apply kernel override
-    if args.kernel_only is not None:
-        print(f"\n➡️ Kernel override active — using only: {args.kernel_only}")
-        search_space["kernel"] = [args.kernel_only]
+    if args.fast_mode:
+        print("\n Kernel override active — using only: linear")
 
     # Run random search
     results, best_params, best_cv_score = random_search_svm(
@@ -245,16 +227,21 @@ def main():
 
     # Save CSV
     results_df = pd.DataFrame(results)
-    csv_path = os.path.join(args.output_dir, "svm_random_results.csv")
-    results_df.to_csv(csv_path, index=False)
-    print(f"\nSaved results to {csv_path}")
+    results_df.to_csv(os.path.join(args.output_dir, "svm_random_results.csv"), index=False)
+    print(f"\nSaved results to {args.output_dir}/svm_random_results.csv")
 
-    # Train best model on FULL training set
+    # FINAL TRAINING (patched)
     print("\nTraining best model on full PCA-reduced training set...")
-    best_clf = SVMClassifier(**best_params)
-    best_clf.fit(X_train_full_pca, y_train_full)
-    y_pred_test = best_clf.predict(X_test_pca)
 
+    best_clf = SVMClassifier(**best_params)
+
+    if args.fast_mode:
+        print("⚡ Fast mode: training on SUBSAMPLED data only.")
+        best_clf.fit(X_train_gs_pca, y_train_gs)
+    else:
+        best_clf.fit(X_train_full_pca, y_train_full)
+
+    y_pred_test = best_clf.predict(X_test_pca)
     test_acc = accuracy_score(y_test, y_pred_test)
 
     print("\nFINAL TEST PERFORMANCE")

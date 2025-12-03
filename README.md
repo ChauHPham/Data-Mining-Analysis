@@ -391,22 +391,35 @@ python dbscan_cluster_analysis.py
 
 ---
 
-## **10. Support Vector Machine (SVM) Classifier**
+# **10. Support Vector Machine (SVM) Classifier (Enhanced)**
 
-Performs **Soft SVM Classification** on the diabetic patient datset with test/train split and evaluation metrics.
+Runs a PCA-assisted Support Vector Machine classifier on the diabetic patient dataset.
 
-### **Files**
+### **File**
 
 * `svm_classifier.py`
 
-### **Input Parameters**
+### **Description**
 
-* `--data`: Path to CSV dataset (default path set to: data/diabetic_data.csv)
-* `--test-size`: Test/train split ratio (default set to: 0.2)
-* `--alpha`: Learning rate of classifier (default set to: 0.001)
-* `--lmda`: Margin size trade-off of hyperplane (default set to: 0.01)
-* `--iterations`: Number of iterations to train classifier(default set to: 100)
-* `--random-state`: Random seed for reproducibility (default set to: 42)
+This script:
+
+* Applies the full preprocessing pipeline
+* Reduces dimensionality using PCA (default: 20 components)
+* Trains a custom SVM classifier (wrapper around scikit-learn)
+* Evaluates:
+
+  * Accuracy
+  * Precision
+  * Recall
+  * F1-score
+* Produces:
+
+  * Confusion matrix
+  * PCA prediction scatter plot
+
+Runtime: **~5 minutes** (training is the slow part).
+
+---
 
 ### **Quick Run**
 
@@ -414,21 +427,103 @@ Performs **Soft SVM Classification** on the diabetic patient datset with test/tr
 python svm_classifier.py
 ```
 
-### **Features**
+### **Optional Parameters**
 
-* Data preprocessed and loaded 
-* Visualizes hyperplane in 2D PCA plot 
-* Evaluation metric (accuracy, precision, recall, f-score) support
+```
+--data PATH             Path to dataset (default: data/diabetic_data.csv)
+--test-size FLOAT       Test ratio (default: 0.2)
+--pca-components N      PCA dimensions (default: 20)
+--kernel {linear,rbf,poly,sigmoid}  SVM kernel (default: rbf)
+--C FLOAT               Regularization strength (default: 1.0)
+--gamma {scale,auto}    Kernel coefficient (default: scale)
+--degree N              Degree for polynomial kernel (default: 3)
+--random-state N        Random seed (default: 42)
+```
 
-### **Outputs**
+---
 
-* `svm_pca.png`
+### **Outputs (saved to `svm_results/`)**
 
+* `svm_confusion_matrix.png`
+* `svm_pca_predictions.png`
+* Terminal accuracy/precision/recall/F1 summary
 
-## Installation
+---
+
+# **11. SVM Random Search (Manual Hyperparameter Search)**
+
+A fast, manually implemented random search for SVM hyperparameters using PCA-reduced data and K-fold CV (default: **fast mode enabled**).
+
+### **File**
+
+* `svm_random_search.py`
+
+---
+
+### **Quick Run (FAST MODE, recommended)**
 
 ```bash
-pip install pandas numpy matplotlib seaborn scikit-learn
+python svm_random_search.py --fast
+```
+
+This mode:
+
+* Forces **linear kernel only** (much faster)
+* Uses **10 PCA components**
+* Subsamples **8,000 training rows**
+* Runs **2 random trials**
+* CV = 2 folds
+
+Runtime: **~10–20 seconds**.
+
+---
+
+### **Full Run (slow, but more thorough)**
+
+```bash
+python svm_random_search.py
+```
+
+* Uses full dataset
+* Uses full PCA components (default: 50)
+* Explores all kernels
+* CV defaults to 3 folds
+* Runs 10 random trials
+
+Runtime: **20–40 minutes** depending on kernel choices.
+
+---
+
+### **Key Parameters**
+
+```
+--data PATH               Path to CSV dataset
+--iterations N            Number of random hyperparameter samples (default: 10)
+--cv N                    Cross-validation folds (default: 3)
+--pca-components N        PCA dimensions (default: 50)
+--max-train-samples N     Limit training samples (default: 30000)
+--fast                    Enable fast mode (recommended)
+--output-dir PATH         Save directory (default: svm_random_results/)
+--random-state N          Random seed (default: 42)
+```
+
+---
+
+### **Outputs (saved to `svm_random_results/`)**
+
+* `svm_random_results.csv` — all CV trials
+* Terminal summary:
+
+  * Best hyperparameters
+  * CV accuracy
+  * Final test accuracy
+
+Example output:
+
+```
+Best params: {'kernel': 'linear', 'C': 7.74, 'gamma': 'auto', 'degree': 3}
+Mean CV accuracy: 0.8940
+Test accuracy:    0.8884
 ```
 
 ---
@@ -543,7 +638,15 @@ python svm_classifier.py
 
 **Outputs:**
 
-* `svm_pca.png`
+* `svm_confusion_matrix.png`
+* `svm_pca_predictions.png`
+
+11. **Run SVM Random Search**
+
+```bash
+python svm_random_search.py
+# Run SVM Random Search (FAST MODE, recommended)
+```
 
 ---
 
