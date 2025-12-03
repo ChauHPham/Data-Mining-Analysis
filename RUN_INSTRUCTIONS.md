@@ -241,14 +241,6 @@ python classification_analysis.py \
 
 ---
 
-Here you go — **fully formatted RUN_INSTRUCTIONS** entries for your four scripts
-(**Hierarchical Clustering**, **Elliptic Envelope**, **k-NN Classifier**, and **k-NN Grid Search**)
-written *in the exact style and structure* of the examples you provided.
-
-You can paste these directly into `RUN_INSTRUCTIONS.md`.
-
----
-
 # **4. Hierarchical Clustering**
 
 Performs **Agglomerative Hierarchical Clustering** using your custom `HierarchicalClustering` class with PCA dimensionality reduction.
