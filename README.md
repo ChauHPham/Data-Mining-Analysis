@@ -650,7 +650,7 @@ python svm_random_search.py
 
 ## Detailed Documentation
 
-See `RUN_INSTRUCTIONS.md` for detailed usage instructions and `IMPROVEMENTS_SUMMARY.md` for information about recent improvements to the cluster analysis.
+See `RUN_INSTRUCTIONS.md` for detailed usage instructions
 
 ---
 
