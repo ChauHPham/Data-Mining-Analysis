@@ -1,104 +1,94 @@
 """
-Support Vector Machine Classifier for Diabetic Readmission
+SVM Classification for Diabetic Readmission
 CMPT 459 Course Project
 
-The following script trains a SVM classifier, evaluates on a train/test split,
-and prints evaluation metrics. 
-
-Adjusted to match structure of knn_classifier.py and classification_analysis.py
+Trains an SVM classifier using PCA-reduced data (dim=50).
+Evaluates accuracy, precision, recall, F1, saves confusion
+matrix and PCA prediction plot.
 """
-import argparse
 
-import pandas as pd
+import argparse
+import os
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
+
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     accuracy_score,
-    precision_recall_fscore_support
+    precision_recall_fscore_support,
+    confusion_matrix,
 )
+from sklearn.svm import SVC
+
+
+# ============================================================
+#                   SVM CLASSIFIER
+# ============================================================
 
 class SVMClassifier:
-    """ Trains a soft SVM classifer for non-linearly separable datasets without kernel."""
+    """
+    Simple SVM wrapper for unified interface with KNNClassifier.
+    """
 
-    def __init__(self, alpha: float = 0.001, lmda: float = 0.01, num_iterations: int = 100):
+    def __init__(self, kernel="rbf", C=1.0, gamma="scale", degree=3, random_state=42):
+        self.kernel = kernel
+        self.C = C
+        self.gamma = gamma
+        self.degree = degree
+        self.random_state = random_state
+        self.model = None
+
+    def fit(self, X, y):
         """
-        :param alpha: learning rate of SVM
-        :param lmda: tradeoff between margin size and x_i inside margin
-        :param num_iterations: number of iterations 
+        Fit the SVM classifier.
         """
-        self.alpha = alpha
-        self.lmda = lmda
-        self.num_iterations = num_iterations
-        self.b = None # Intercept of hyperplane equation
-        self.weights = None # Weights of training object
-    
-    def fit(self, X: np.ndarray, y: np.ndarray):
-        """:param X: array of shape (n_samples, n_features)"""
-        n_samples, n_features = X.shape
+        self.model = SVC(
+            kernel=self.kernel,
+            C=self.C,
+            gamma=self.gamma,
+            degree=self.degree,
+            probability=False,
+            random_state=self.random_state,
+        )
+        self.model.fit(X, y)
+        return self
 
-        # Initialize both as 0 
-        weights = np.zeros(n_features)
-        b = 0 
-        iterations = self.num_iterations 
+    def predict(self, X):
+        """
+        Predict class labels.
+        """
+        if self.model is None:
+            raise ValueError("SVMClassifier must be fitted before calling predict().")
+        return self.model.predict(X).astype(int)
 
-        for iter in range(iterations):
-            # Update weights and intercept based on margin 
-            for i, X_i in enumerate(X):
-                # Points lie within slack margin
-                if y[i] * (np.dot(weights, X_i) - b) >= 1: # Case: y_i * w_i * x_i - b >= 1
-                    # Update weight by the following: 
-                    # new weight = weight + alpha * (2lambda * weight - y_i * x_i)
-                    weights = weights - (self.alpha * (2 * self.lmda * weights))
 
-                else: # Case: y_i * w_i * x_i - b < 1
-                    # Update weight as: weight + alpha * (2lambda * weight - y_i * x_i)
-                    weights = weights - (self.alpha * (2 * self.lmda * weights - np.dot(y[i], X_i)))
-                    # Update intercept b as: new intercept = b - alpha * (y_i)
-                    b = b - (self.alpha * y[i])
-            
-            self.weights = weights
-            self.b = b 
-             
-            return weights, b
-    
-    def predict(self, X: np.ndarray):
-        prediction = np.dot(X, self.weights) - self.b
-        # Returns an array of binary results (-1,1)
-        pred_result = [1 if pred > 0 else -1 for pred in prediction]
-        return pred_result 
-    
-def getHyperplane(X: np.ndarray, weights, b, offset):
-    """ Helper function for visualization of hyperplanes."""
-    # Hyperplane equation: X_i * W + b = 0
-    # Draws a plane with soft margins  
-    hyperplane = (-weights[0] * X + b + offset) / weights[1]
-    return hyperplane
+# ============================================================
+#                   PREPROCESSING
+# ============================================================
 
-# Preprocess data (same as knn_classifier.py)
-def load_and_preprocess_data(path: str):
-
+def load_and_preprocess_data(path):
     print("Loading data...")
     df = pd.read_csv(path)
     print(f"Original shape: {df.shape}")
 
-    df = df.replace('?', np.nan)
+    df = df.replace("?", np.nan)
 
     # Drop columns with >40% missing
     threshold = 0.4 * len(df)
     df = df.dropna(thresh=threshold, axis=1)
 
-    # Fill categorical NAs
-    for col in df.select_dtypes(include='object').columns:
+    # Fill categorical NA
+    for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].fillna("Unknown")
 
     # Encode target
-    df["readmitted"] = df["readmitted"].map({'NO': 0, '>30': 1, '<30': 2})
+    df["readmitted"] = df["readmitted"].map({"NO": 0, ">30": 1, "<30": 2})
 
-    # Encode categorical
-    cat_cols = df.select_dtypes(include='object').columns
+    # Encode categorical variables
+    cat_cols = df.select_dtypes(include="object").columns
     le = LabelEncoder()
     for col in cat_cols:
         if df[col].nunique() < 10:
@@ -106,111 +96,173 @@ def load_and_preprocess_data(path: str):
         else:
             df = pd.get_dummies(df, columns=[col], drop_first=True)
 
-    # Drop IDs
+    # Remove IDs if present
     for col in ["encounter_id", "patient_nbr"]:
         if col in df.columns:
             df = df.drop(columns=[col])
 
-    # Scale numeric
-    num_cols = df.select_dtypes(include=['int64', 'float64']).columns
+    # Scale numerical features
+    num_cols = df.select_dtypes(include=["int64", "float64"]).columns
     scaler = StandardScaler()
     df[num_cols] = scaler.fit_transform(df[num_cols])
 
     X = df.drop(columns=["readmitted"]).values
-    y = df["readmitted"].values
+    y = df["readmitted"].values.astype(int)
+
     print("Preprocessing complete! Final shape:", X.shape)
     return X, y
 
 
-def plot_svm(X, label_true, label_pred, save_path):
-    """ Visualization of the hyperplane that separates 2 classes.
-        To do: Superimpose hyperplane and predictions onto test sample plot
-    """    
+# ============================================================
+#                   VISUALIZATION HELPERS
+# ============================================================
 
-    print("Reducing data via PCA for 2D Visualization")
+def plot_confusion_matrix(cm, class_names, out_path):
+    plt.figure(figsize=(6, 5))
+    plt.imshow(cm, cmap="Blues")
+    plt.title("SVM Confusion Matrix")
+    plt.colorbar()
+
+    ticks = np.arange(len(class_names))
+    plt.xticks(ticks, class_names)
+    plt.yticks(ticks, class_names)
+
+    thresh = cm.max() / 2.0
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            plt.text(j, i, str(cm[i, j]),
+                     ha="center",
+                     color="white" if cm[i, j] > thresh else "black")
+
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"Saved confusion matrix to {out_path}")
+
+
+def plot_pca_scatter(X, y_true, y_pred, out_path):
+    print("Running PCA for visualization...")
     pca = PCA(n_components=2, random_state=42)
     X_pca = pca.fit_transform(X)
 
-    plt.figure(figsize=(10, 8))
-    plt.title("Plot for linear SVM Classification", fontsize = 14, fontweight = "bold")
-    plt.tight_layout()
-    plt.savefig(save_path, dpi = 300, bbox_inches = "tight")
-    plt.close()
+    correct = (y_true == y_pred)
 
-# Parse arguments to run SVM Classifier
+    plt.figure(figsize=(8, 6))
+    plt.scatter(
+        X_pca[correct, 0], X_pca[correct, 1],
+        c=y_pred[correct], cmap="viridis",
+        s=20, alpha=0.5, label="Correct"
+    )
+
+    plt.scatter(
+        X_pca[~correct, 0], X_pca[~correct, 1],
+        c=y_pred[~correct], cmap="viridis",
+        s=60, alpha=0.9, marker="x",
+        edgecolors="black", label="Incorrect"
+    )
+
+    plt.title("SVM Predictions in PCA Space (colored by predicted class)")
+    plt.xlabel("PC1")
+    plt.ylabel("PC2")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"Saved PCA prediction scatter to {out_path}")
+
+
+# ============================================================
+#                   ARGPARSE
+# ============================================================
+
 def parse_args():
-    parser = argparse.ArgumentParser(description = 'SVM Classifier for Diabetic Readmission')
-    parser.add_argument('--data', type = str, default = 'data/diabetic_data.csv',
-                        help = 'Path to diabetic dataset CSV')
-    parser.add_argument('--test-size', type = float, default = 0.2,
-                        help='Test set to training set proportion')
-    parser.add_argument('--alpha', type = float, default = 0.001,
-                        help = 'Set learning rate')
-    parser.add_argument('--lmda', type = float, default = 0.01,
-                        help='Margin size tradeoff')
-    parser.add_argument('--iterations', type = int, default = 100,
-                        help='Number of iterations')
-    parser.add_argument('--random-state', type=int, default=42,
-                        help='Random seed')
-    
+    parser = argparse.ArgumentParser(description="SVM Classification with PCA")
+    parser.add_argument("--data", type=str, default="data/diabetic_data.csv")
+    parser.add_argument("--test-size", type=float, default=0.2)
+    parser.add_argument("--pca-components", type=int, default=50)
+
+    # SVM hyperparameters
+    parser.add_argument("--kernel", type=str, default="rbf",
+                        choices=["linear", "rbf", "poly", "sigmoid"])
+    parser.add_argument("--C", type=float, default=1.0)
+    parser.add_argument("--gamma", type=str, default="scale")
+    parser.add_argument("--degree", type=int, default=3)
+
+    parser.add_argument("--output-dir", type=str, default="svm_results")
+    parser.add_argument("--random-state", type=int, default=42)
     return parser.parse_args()
 
+
+# ============================================================
+#                   MAIN
+# ============================================================
+
 def main():
-    """ Main script to run SVM classifier on the diabetic dataset. """
     args = parse_args()
     np.random.seed(args.random_state)
+    os.makedirs(args.output_dir, exist_ok=True)
 
     print("=" * 70)
-    print("Soft SVM Classifier")
-    print("=" * 70)
-    print(f"Dataset:      {args.data}")
-    print(f"Learning rate (alpha): {args.alpha}")
-    print(f"Margin tradeoff (lambda): {args.lmda}")
-    print(f"Number of iterations: {args.iterations}")
+    print(f"SVM CLASSIFICATION (PCA {args.pca_components} components)")
     print("=" * 70)
 
-    # Preprocess data for classification
+    # Load data
     X, y = load_and_preprocess_data(args.data)
-    # Create train/test split of data 
+
+    # PCA before train/test split (consistent with your KNN pipeline)
+    print(f"Applying PCA ({args.pca_components} components)...")
+    pca = PCA(n_components=args.pca_components, random_state=42)
+    X_pca = pca.fit_transform(X)
+    print(f"PCA complete. Shape: {X_pca.shape}")
+
+    # Train/test split
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size = args.test_size, random_state = args.random_state, stratify = y
+        X_pca, y,
+        test_size=args.test_size,
+        random_state=args.random_state,
+        stratify=y
     )
 
-    # Train Soft SVM
+    # Train classifier
     svm = SVMClassifier(
-        alpha = args.alpha,
-        lmda = args.lmda,
-        num_iterations = args.iterations
+        kernel=args.kernel,
+        C=args.C,
+        gamma=args.gamma,
+        degree=args.degree,
+        random_state=args.random_state,
     )
+
+    print("Training SVM...")
     svm.fit(X_train, y_train)
-    
-    # Get classification predictions 
-    label_pred = svm.predict(X_test)
- 
-    # Evaluation Metrics
-    accuracy = accuracy_score(y_test, label_pred)
+
+    print("Predicting...")
+    y_pred = svm.predict(X_test)
+
+    # Evaluate
+    acc = accuracy_score(y_test, y_pred)
     prec, rec, f1, _ = precision_recall_fscore_support(
-        y_test, label_pred, average = 'weighted', zero_division = 0
+        y_test, y_pred, average="weighted", zero_division=0
     )
 
-    print("\nClassification Results:")
-    print("=" * 70)
-    print(f"Accuracy: {accuracy:.4f}")
+    print("\nRESULTS")
+    print("-" * 70)
+    print(f"Accuracy:  {acc:.4f}")
     print(f"Precision: {prec:.4f}")
-    print(f"Recall: {rec:.4f}")
-    print(f"F1-score: {f1:.4f}")
+    print(f"Recall:    {rec:.4f}")
+    print(f"F1-score:  {f1:.4f}")
 
-    # PCA visualization
-    save_file = f"svm_pca.png"
-    plot_svm(X_test, y_test, label_pred, save_file)
-    print("Results saved as ", save_file)
+    cm = confusion_matrix(y_test, y_pred)
+    cm_path = os.path.join(args.output_dir, "svm_confusion_matrix.png")
+    plot_confusion_matrix(cm, ["No", ">30", "<30"], cm_path)
+
+    pca_path = os.path.join(args.output_dir, "svm_pca_predictions.png")
+    plot_pca_scatter(X_test, y_test, y_pred, pca_path)
+
+    print("\n✓ Results saved in:", args.output_dir)
     print("=" * 70)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
-
-
-
-
-
-
