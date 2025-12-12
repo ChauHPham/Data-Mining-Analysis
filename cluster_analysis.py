@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.decomposition import PCA
+from sklearn.metrics import calinski_harabasz_score, davies_bouldin_score
 import argparse
 from kmeans import KMeans
 
@@ -196,6 +197,8 @@ def main():
     # Test different k values
     ks = list(range(args.min_k, args.max_k + 1))
     silhouettes = []
+    calinski_harabasz_scores = []
+    davies_bouldin_scores = []
     
     best_k = None
     best_score = -1
@@ -209,7 +212,16 @@ def main():
         clustering = kmeans.fit(X_pca)
         sil_score = kmeans.silhouette(clustering, X_pca)
         silhouettes.append(sil_score)
-        print(f"Silhouette: {sil_score:.4f}")
+        
+        # Calculate Calinski-Harabasz Index (higher is better)
+        ch_score = calinski_harabasz_score(X_pca, clustering)
+        calinski_harabasz_scores.append(ch_score)
+        
+        # Calculate Davies-Bouldin Index (lower is better)
+        db_score = davies_bouldin_score(X_pca, clustering)
+        davies_bouldin_scores.append(db_score)
+        
+        print(f"Silhouette: {sil_score:.4f}, CH: {ch_score:.4f}, DB: {db_score:.4f}")
         
         if sil_score > best_score:
             best_score = sil_score
@@ -222,13 +234,18 @@ def main():
     print("=" * 70)
     
     print("\nKMeans++ Results")
-    print("-" * 70)
-    print("k\tSilhouette Coefficient")
-    print("-" * 70)
-    for k, score in zip(ks, silhouettes):
+    print("-" * 90)
+    print("k\tSilhouette\tCalinski-Harabasz\tDavies-Bouldin")
+    print("-" * 90)
+    for k, sil, ch, db in zip(ks, silhouettes, calinski_harabasz_scores, davies_bouldin_scores):
         marker = " <-- Best" if k == best_k else ""
-        print(f"{k}\t{score:.4f}{marker}")
-    print(f"\nBest k: {best_k} (Silhouette: {best_score:.4f})")
+        print(f"{k}\t{sil:.4f}\t{ch:.4f}\t\t{db:.4f}{marker}")
+    print(f"\nBest k: {best_k}")
+    print(f"  Silhouette: {best_score:.4f}")
+    if best_k is not None:
+        best_idx = best_k - args.min_k
+        print(f"  Calinski-Harabasz: {calinski_harabasz_scores[best_idx]:.4f}")
+        print(f"  Davies-Bouldin: {davies_bouldin_scores[best_idx]:.4f}")
     
     # Plot silhouette coefficients
     print("\n" + "=" * 70)

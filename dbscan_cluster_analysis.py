@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.decomposition import PCA
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
 from sklearn.neighbors import NearestNeighbors
 import argparse
 
@@ -223,6 +223,8 @@ def main():
     eps_values = [eps_25, eps_50, eps_75, eps_90, eps_90 * 1.5, eps_90 * 2.0]
     
     silhouettes = []
+    calinski_harabasz_scores = []
+    davies_bouldin_scores = []
     eps_results = []
     best_score = -1
     best_clustering = None
@@ -239,7 +241,7 @@ def main():
         n_clusters = len(unique_labels[unique_labels != 0])
         n_noise = np.sum(clustering == 0)
         
-        # Get silhouette score (only if we have more than 1 cluster)
+        # Get evaluation metrics (only if we have more than 1 cluster)
         if n_clusters > 1:
             # Filter to only non-noise points
             mask = clustering != 0
@@ -249,18 +251,34 @@ def main():
                 if len(valid_clusters) > 1:
                     mask = np.isin(clustering, valid_clusters)
                     sil = silhouette_score(X_pca[mask], clustering[mask])
+                    ch_score = calinski_harabasz_score(X_pca[mask], clustering[mask])
+                    db_score = davies_bouldin_score(X_pca[mask], clustering[mask])
                 else:
                     sil = -1
+                    ch_score = -1
+                    db_score = -1
             else:
                 sil = -1
+                ch_score = -1
+                db_score = -1
         else:
             sil = -1
+            ch_score = -1
+            db_score = -1
         
         silhouettes.append(sil)
-        eps_results.append({'eps': eps, 'n_clusters': n_clusters, 'n_noise': n_noise, 'silhouette': sil})
+        calinski_harabasz_scores.append(ch_score)
+        davies_bouldin_scores.append(db_score)
+        eps_results.append({'eps': eps, 'n_clusters': n_clusters, 'n_noise': n_noise, 
+                           'silhouette': sil, 'calinski_harabasz': ch_score, 'davies_bouldin': db_score})
         
         status = "✓" if n_clusters > 0 else "✗"
-        print(f"{status} eps={eps:6.4f}: {n_clusters:2d} clusters, {n_noise:4d} noise, silhouette={sil:7.4f}")
+        if sil > -1:
+            print(f"{status} eps={eps:6.4f}: {n_clusters:2d} clusters, {n_noise:4d} noise, "
+                  f"Silhouette={sil:7.4f}, CH={ch_score:7.4f}, DB={db_score:7.4f}")
+        else:
+            print(f"{status} eps={eps:6.4f}: {n_clusters:2d} clusters, {n_noise:4d} noise, "
+                  f"Silhouette={sil:7.4f}")
         
         if sil > best_score and n_clusters > 0:
             best_score = sil
@@ -287,7 +305,10 @@ def main():
     print(f"  Clusters: {n_clusters}")
     print(f"  Noise points: {n_noise}")
     if best_score > -1:
+        best_idx = eps_values.index(best_eps)
         print(f"  Silhouette score: {best_score:.4f}")
+        print(f"  Calinski-Harabasz: {calinski_harabasz_scores[best_idx]:.4f}")
+        print(f"  Davies-Bouldin: {davies_bouldin_scores[best_idx]:.4f}")
 
 
     print("\nGenerating visualizations...")
