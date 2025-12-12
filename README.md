@@ -1,6 +1,6 @@
-# CMPT-459-Course-Project
+# Data Mining Analysis Project
 
-Course project for CMPT 459 - Machine Learning and Data Mining.
+Project - Machine Learning and Data Mining.
 
 This project analyzes diabetic patient data using clustering and classification techniques.
 
