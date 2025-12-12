@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
 import argparse
 
@@ -39,6 +40,12 @@ def parse_args():
 
     parser.add_argument('--vis-dims', type=int, default=2, choices=[2, 3],
                         help='Dimensions for visualization (2 or 3)')
+    parser.add_argument('--vis-method', type=str, default='pca', choices=['pca', 'tsne'],
+                        help='Dimensionality reduction method for visualization: pca or tsne (default: pca)')
+    parser.add_argument('--tsne-perplexity', type=float, default=30.0,
+                        help='Perplexity parameter for t-SNE (default: 30.0)')
+    parser.add_argument('--tsne-iterations', type=int, default=1000,
+                        help='Number of iterations for t-SNE (default: 1000)')
 
     parser.add_argument('--sample-size', type=int, default=2000,
                         help='Limit samples (Hierarchical Clustering is O(n^3))')
@@ -113,7 +120,7 @@ def apply_pca(X, n_components):
 # =========================================================
 # 4. Visualization 
 # =========================================================
-def visualize_cluster(X_vis, labels, title, save_path, silhouette=None):
+def visualize_cluster(X_vis, labels, title, save_path, silhouette=None, method='PCA'):
     dims = X_vis.shape[1]
 
     if hasattr(matplotlib, "colormaps"):
@@ -159,9 +166,14 @@ def visualize_cluster(X_vis, labels, title, save_path, silhouette=None):
             title += f"\nSilhouette: {silhouette:.4f}"
 
         ax.set_title(title)
-        ax.set_xlabel("PC1")
-        ax.set_ylabel("PC2")
-        ax.set_zlabel("PC3")
+        if method == 't-SNE':
+            ax.set_xlabel("t-SNE Dimension 1")
+            ax.set_ylabel("t-SNE Dimension 2")
+            ax.set_zlabel("t-SNE Dimension 3")
+        else:
+            ax.set_xlabel("PC1")
+            ax.set_ylabel("PC2")
+            ax.set_zlabel("PC3")
         ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
 
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
@@ -253,13 +265,33 @@ def main():
     print("\nSaved: hierarchical_silhouette_scores.png")
 
     # Visualization (2D/3D)
-    print(f"\nReducing to {args.vis_dims}D for visualization...")
-    X_vis = PCA(n_components=args.vis_dims).fit_transform(X)
+    print(f"\nReducing to {args.vis_dims}D for visualization using {args.vis_method.upper()}...")
+    
+    if args.vis_method == 'tsne':
+        print(f"  t-SNE parameters: perplexity={args.tsne_perplexity}, iterations={args.tsne_iterations}")
+        print("  Note: t-SNE can be slow for large datasets. Consider using PCA for faster visualization.")
+        
+        # For t-SNE, use PCA-reduced data first to speed up computation
+        print("  Pre-reducing with PCA to 50 components for faster t-SNE computation...")
+        X_pca_pre = PCA(n_components=min(50, X.shape[1])).fit_transform(X)
+        
+        tsne = TSNE(
+            n_components=args.vis_dims,
+            perplexity=args.tsne_perplexity,
+            n_iter=args.tsne_iterations,
+            random_state=args.random_seed,
+            verbose=1
+        )
+        X_vis = tsne.fit_transform(X_pca_pre)
+        vis_method = 't-SNE'
+    else:
+        X_vis = PCA(n_components=args.vis_dims).fit_transform(X)
+        vis_method = 'PCA'
 
     vis_title = f"Hierarchical Clustering (k={best_k})"
-    vis_file = f"hierarchical_k{best_k}.png"
+    vis_file = f"hierarchical_k{best_k}_{args.vis_method}.png"
 
-    visualize_cluster(X_vis, best_labels, vis_title, vis_file, silhouette=best_score)
+    visualize_cluster(X_vis, best_labels, vis_title, vis_file, silhouette=best_score, method=vis_method)
 
     print(f"Saved: {vis_file}")
     print("\nHierarchical clustering complete!")

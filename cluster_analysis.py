@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 from sklearn.metrics import calinski_harabasz_score, davies_bouldin_score
 import argparse
 from kmeans import KMeans
@@ -30,6 +31,12 @@ def parse_args():
                         help='Number of PCA components for clustering')
     parser.add_argument('--vis-dims', type=int, default=2, choices=[2, 3],
                         help='Number of dimensions for visualization (2 or 3)')
+    parser.add_argument('--vis-method', type=str, default='pca', choices=['pca', 'tsne'],
+                        help='Dimensionality reduction method for visualization: pca or tsne (default: pca)')
+    parser.add_argument('--tsne-perplexity', type=float, default=30.0,
+                        help='Perplexity parameter for t-SNE (default: 30.0)')
+    parser.add_argument('--tsne-iterations', type=int, default=1000,
+                        help='Number of iterations for t-SNE (default: 1000)')
     parser.add_argument('--random-seed', type=int, default=42,
                         help='Random seed for reproducibility')
     
@@ -111,7 +118,7 @@ def apply_pca(X, n_components):
     return X_pca, pca_model
 
 
-def visualize_cluster(X_vis, clustering, title, save_path, silhouette_score=None):
+def visualize_cluster(X_vis, clustering, title, save_path, silhouette_score=None, method='PCA'):
     """
     Visualizes clusters in 2D or 3D scatter plot with color-coded clusters.
     :param X_vis: Data points for visualization (n_samples, 2 or 3)
@@ -119,6 +126,7 @@ def visualize_cluster(X_vis, clustering, title, save_path, silhouette_score=None
     :param title: Title for the plot
     :param save_path: Path to save the plot
     :param silhouette_score: Optional silhouette score to display
+    :param method: Dimensionality reduction method used ('PCA' or 't-SNE')
     """
     n_dims = X_vis.shape[1]
     
@@ -144,8 +152,12 @@ def visualize_cluster(X_vis, clustering, title, save_path, silhouette_score=None
                        label=f'Cluster {int(cluster_id)}', 
                        alpha=0.6, s=20, edgecolors='black', linewidths=0.5)
         
-        plt.xlabel('Principal Component 1', fontsize=12)
-        plt.ylabel('Principal Component 2', fontsize=12)
+        if method == 't-SNE':
+            plt.xlabel('t-SNE Dimension 1', fontsize=12)
+            plt.ylabel('t-SNE Dimension 2', fontsize=12)
+        else:
+            plt.xlabel('Principal Component 1', fontsize=12)
+            plt.ylabel('Principal Component 2', fontsize=12)
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9)
         
     elif n_dims == 3:
@@ -162,9 +174,14 @@ def visualize_cluster(X_vis, clustering, title, save_path, silhouette_score=None
                       color=color, label=f'Cluster {int(cluster_id)}',
                       alpha=0.6, s=20, edgecolors='black', linewidths=0.5)
         
-        ax.set_xlabel('Principal Component 1', fontsize=11)
-        ax.set_ylabel('Principal Component 2', fontsize=11)
-        ax.set_zlabel('Principal Component 3', fontsize=11)
+        if method == 't-SNE':
+            ax.set_xlabel('t-SNE Dimension 1', fontsize=11)
+            ax.set_ylabel('t-SNE Dimension 2', fontsize=11)
+            ax.set_zlabel('t-SNE Dimension 3', fontsize=11)
+        else:
+            ax.set_xlabel('Principal Component 1', fontsize=11)
+            ax.set_ylabel('Principal Component 2', fontsize=11)
+            ax.set_zlabel('Principal Component 3', fontsize=11)
         ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9)
     
     # Add silhouette score to title if provided
@@ -267,20 +284,40 @@ def main():
     print("  Saved silhouette score plot to silhouette_scores.png")
     
     # Reduce to 2D or 3D for visualization only (clustering was done with PCA dimensions)
-    print(f"\nReducing to {args.vis_dims}D for cluster visualization...")
-    X_vis = PCA(n_components=args.vis_dims).fit_transform(X)
+    print(f"\nReducing to {args.vis_dims}D for cluster visualization using {args.vis_method.upper()}...")
+    
+    if args.vis_method == 'tsne':
+        print(f"  t-SNE parameters: perplexity={args.tsne_perplexity}, iterations={args.tsne_iterations}")
+        print("  Note: t-SNE can be slow for large datasets. Consider using PCA for faster visualization.")
+        
+        # For t-SNE, use PCA-reduced data first to speed up computation
+        print("  Pre-reducing with PCA to 50 components for faster t-SNE computation...")
+        X_pca_pre = PCA(n_components=min(50, X.shape[1])).fit_transform(X)
+        
+        tsne = TSNE(
+            n_components=args.vis_dims,
+            perplexity=args.tsne_perplexity,
+            n_iter=args.tsne_iterations,
+            random_state=args.random_seed,
+            verbose=1
+        )
+        X_vis = tsne.fit_transform(X_pca_pre)
+        vis_method = 't-SNE'
+    else:
+        X_vis = PCA(n_components=args.vis_dims).fit_transform(X)
+        vis_method = 'PCA'
     
     # Visualize best clustering
     print(f"\nVisualizing clusters with k={best_k}...")
     title = f'K-Means Clustering (KMeans++, k={best_k})'
     visualize_cluster(X_vis, best_clustering, 
-                     title, f'clustering_k{best_k}.png',
-                     silhouette_score=best_score)
-    print(f"  Saved plot to clustering_k{best_k}.png")
+                     title, f'clustering_k{best_k}_{args.vis_method}.png',
+                     silhouette_score=best_score, method=vis_method)
+    print(f"  Saved plot to clustering_k{best_k}_{args.vis_method}.png")
     
     # If target variable exists, create comparison plot (2D only)
     if target is not None and args.vis_dims == 2:
-        print("\nCreating comparison plot with actual readmission labels...")
+        print(f"\nCreating comparison plot with actual readmission labels ({vis_method})...")
         plt.figure(figsize=(10, 8))
         
         # Plot with actual readmission labels
@@ -294,23 +331,33 @@ def main():
                        color=colors_target[i], label=labels_target[i],
                        alpha=0.6, s=20, edgecolors='black', linewidths=0.5)
         
-        plt.xlabel('Principal Component 1', fontsize=12)
-        plt.ylabel('Principal Component 2', fontsize=12)
-        plt.title('PCA Projection Colored by Readmission Status', fontsize=14, fontweight='bold')
+        if vis_method == 't-SNE':
+            plt.xlabel('t-SNE Dimension 1', fontsize=12)
+            plt.ylabel('t-SNE Dimension 2', fontsize=12)
+            plt.title(f'{vis_method} Projection Colored by Readmission Status', fontsize=14, fontweight='bold')
+            plt.savefig(f'readmission_labels_{args.vis_method}.png', dpi=300, bbox_inches='tight')
+            print(f"  Saved readmission labels comparison plot to readmission_labels_{args.vis_method}.png")
+        else:
+            plt.xlabel('Principal Component 1', fontsize=12)
+            plt.ylabel('Principal Component 2', fontsize=12)
+            plt.title('PCA Projection Colored by Readmission Status', fontsize=14, fontweight='bold')
+            plt.savefig('readmission_labels_pca.png', dpi=300, bbox_inches='tight')
+            print("  Saved readmission labels comparison plot to readmission_labels_pca.png")
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
         plt.tight_layout()
-        plt.savefig('readmission_labels_pca.png', dpi=300, bbox_inches='tight')
         plt.close()
-        print("  Saved readmission labels comparison plot to readmission_labels_pca.png")
     
     print("\n" + "=" * 70)
     print("CLUSTER ANALYSIS COMPLETE!")
     print("=" * 70)
     print("\nGenerated files:")
     print("  - silhouette_scores.png")
-    print(f"  - clustering_k{best_k}.png")
+    print(f"  - clustering_k{best_k}_{args.vis_method}.png")
     if target is not None and args.vis_dims == 2:
-        print("  - readmission_labels_pca.png")
+        if args.vis_method == 'tsne':
+            print(f"  - readmission_labels_{args.vis_method}.png")
+        else:
+            print("  - readmission_labels_pca.png")
     print()
 
 

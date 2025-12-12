@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
 from sklearn.metrics import (
     accuracy_score,
     precision_recall_fscore_support,
@@ -224,6 +224,15 @@ def parse_args():
     parser.add_argument("--weights", type=str, default="uniform",
                         choices=["uniform", "distance"])
     parser.add_argument("--p", type=int, default=2, choices=[1, 2])
+    parser.add_argument("--tune-hyperparameters", action='store_true',
+                        help='Enable hyperparameter tuning')
+    parser.add_argument("--tuning-method", type=str, default='random',
+                        choices=['grid', 'random'],
+                        help='Tuning method: grid (GridSearchCV) or random (RandomizedSearchCV)')
+    parser.add_argument("--tuning-iterations", type=int, default=20,
+                        help='Number of iterations for RandomizedSearchCV')
+    parser.add_argument("--cv-folds", type=int, default=5,
+                        help='Number of CV folds for hyperparameter tuning')
     parser.add_argument("--output-dir", type=str, default="knn_results")
     parser.add_argument("--random-state", type=int, default=42)
     return parser.parse_args()
@@ -256,16 +265,80 @@ def main():
         X_pca, y, test_size=args.test_size, random_state=args.random_state, stratify=y
     )
 
-    # Train classifier
-    knn = KNNClassifier(
-        n_neighbors=args.n_neighbors,
-        weights=args.weights,
-        p=args.p,
-        batch_size=500
-    )
-
-    print("Training k-NN...")
-    knn.fit(X_train, y_train)
+    # Hyperparameter tuning (if enabled)
+    if args.tune_hyperparameters:
+        print("\n" + "=" * 70)
+        if args.tuning_method == 'grid':
+            print("HYPERPARAMETER TUNING (Grid Search)")
+        else:
+            print("HYPERPARAMETER TUNING (Random Search)")
+        print("=" * 70)
+        
+        # Define parameter grid
+        param_grid = {
+            'n_neighbors': [3, 5, 7, 9, 11, 15],
+            'weights': ['uniform', 'distance'],
+            'p': [1, 2]
+        }
+        
+        print(f"\nParameter search space:")
+        for param, values in param_grid.items():
+            print(f"  {param}: {values}")
+        
+        total_combinations = len(param_grid['n_neighbors']) * len(param_grid['weights']) * len(param_grid['p'])
+        print(f"\nTotal combinations: {total_combinations}")
+        
+        if args.tuning_method == 'random':
+            print(f"Random iterations: {args.tuning_iterations}")
+        print(f"CV folds: {args.cv_folds}")
+        
+        # Create base KNN
+        knn_base = KNNClassifier(batch_size=500)
+        
+        # Perform search
+        if args.tuning_method == 'grid':
+            print("\nRunning GridSearchCV...")
+            search = GridSearchCV(
+                knn_base,
+                param_grid=param_grid,
+                cv=args.cv_folds,
+                scoring='f1_weighted',
+                n_jobs=-1,
+                verbose=1
+            )
+        else:
+            print("\nRunning RandomizedSearchCV...")
+            search = RandomizedSearchCV(
+                knn_base,
+                param_distributions=param_grid,
+                n_iter=args.tuning_iterations,
+                cv=args.cv_folds,
+                scoring='f1_weighted',
+                random_state=args.random_state,
+                n_jobs=-1,
+                verbose=1
+            )
+        
+        search.fit(X_train, y_train)
+        
+        print("\nBest parameters found:")
+        for param, value in search.best_params_.items():
+            print(f"  {param}: {value}")
+        print(f"Best CV F1 Score: {search.best_score_:.4f}")
+        
+        # Use best model
+        knn = search.best_estimator_
+        print("\nUsing best tuned model for evaluation...")
+    else:
+        # Train classifier with default/specified parameters
+        knn = KNNClassifier(
+            n_neighbors=args.n_neighbors,
+            weights=args.weights,
+            p=args.p,
+            batch_size=500
+        )
+        print("Training k-NN...")
+        knn.fit(X_train, y_train)
 
     print("Predicting...")
     y_pred = knn.predict(X_test).astype(int)

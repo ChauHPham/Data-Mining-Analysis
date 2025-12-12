@@ -11,11 +11,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.model_selection import train_test_split, cross_val_score, KFold, RandomizedSearchCV
+from sklearn.model_selection import (train_test_split, cross_val_score, KFold, 
+                                     RandomizedSearchCV, GridSearchCV)
 from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, 
                               confusion_matrix, classification_report, roc_curve, 
                               roc_auc_score, auc)
-from sklearn.feature_selection import SelectFromModel
+from sklearn.feature_selection import (SelectFromModel, RFE, SelectKBest, 
+                                       mutual_info_classif, f_classif)
 from sklearn.linear_model import LogisticRegression
 import argparse
 import scipy.stats as st
@@ -45,14 +47,21 @@ def parse_args():
     parser.add_argument('--random-seed', type=int, default=42,
                         help='Random seed for reproducibility (default: 42)')
     parser.add_argument('--tune-hyperparameters', action='store_true',
-                        help='Enable hyperparameter tuning using RandomizedSearchCV')
+                        help='Enable hyperparameter tuning')
+    parser.add_argument('--tuning-method', type=str, default='random', 
+                        choices=['grid', 'random'],
+                        help='Hyperparameter tuning method: grid (GridSearchCV) or random (RandomizedSearchCV) (default: random)')
     parser.add_argument('--tuning-iterations', type=int, default=20,
                         help='Number of iterations for RandomizedSearchCV (default: 20)')
     parser.add_argument('--feature-selection', type=str, default='lasso', 
-                        choices=['lasso', 'none'],
-                        help='Feature selection method: lasso (L1) or none (default: lasso)')
+                        choices=['lasso', 'rfe', 'mutual_info', 'none'],
+                        help='Feature selection method: lasso (L1), rfe (Recursive Feature Elimination), mutual_info (Mutual Information), or none (default: lasso)')
     parser.add_argument('--lasso-C', type=float, default=0.1,
                         help='Inverse regularization strength for Lasso (default: 0.1)')
+    parser.add_argument('--n-features', type=int, default=100,
+                        help='Number of features to select for RFE or Mutual Information (default: 100)')
+    parser.add_argument('--rfe-step', type=int, default=10,
+                        help='Number of features to remove at each RFE step (default: 10)')
     
     args = parser.parse_args()
     return args
@@ -350,68 +359,234 @@ def select_features_lasso(X, y, C=0.1, n_features_target=None, random_state=42):
     return selected_indices, selected_feature_names, selector, n_selected
 
 
-def tune_hyperparameters(X_train, y_train, n_iter=20, cv_folds=5, random_state=42):
+def select_features_rfe(X, y, n_features=100, step=10, random_state=42):
     """
-    Perform hyperparameter tuning using RandomizedSearchCV.
+    Select features using Recursive Feature Elimination (RFE).
+    
+    :param X: Feature matrix
+    :param y: Target labels
+    :param n_features: Number of features to select
+    :param step: Number of features to remove at each step
+    :param random_state: Random seed
+    :return: Selected feature indices, feature names, selector, number of features selected
+    """
+    print("\n" + "=" * 70)
+    print("RECURSIVE FEATURE ELIMINATION (RFE)")
+    print("=" * 70)
+    
+    # Validate n_features
+    n_features = min(n_features, X.shape[1])
+    if n_features <= 0:
+        raise ValueError(f"n_features must be positive, got {n_features}")
+    
+    print(f"\nRFE Configuration:")
+    print(f"  Target number of features: {n_features}")
+    print(f"  Features removed per step: {step}")
+    print(f"  Base estimator: Logistic Regression")
+    
+    # Use Logistic Regression as the base estimator for RFE
+    base_estimator = LogisticRegression(
+        random_state=random_state,
+        max_iter=1000,
+        solver='liblinear'
+    )
+    
+    print(f"\nTraining RFE...")
+    start_time = time.time()
+    
+    # Create RFE selector
+    rfe_selector = RFE(
+        estimator=base_estimator,
+        n_features_to_select=n_features,
+        step=min(step, n_features),  # Don't remove more than available
+        verbose=0
+    )
+    
+    rfe_selector.fit(X, y)
+    rfe_time = time.time() - start_time
+    
+    # Get selected features
+    selected_mask = rfe_selector.get_support()
+    selected_indices = np.where(selected_mask)[0]
+    selected_feature_names = X.columns[selected_indices].tolist()
+    
+    n_selected = len(selected_indices)
+    
+    print(f"\n✓ RFE selected {n_selected} features out of {X.shape[1]} ({n_selected/X.shape[1]*100:.1f}%)")
+    print(f"  Selection time: {rfe_time:.2f} seconds")
+    
+    # Get feature rankings (1 = best, higher = worse)
+    feature_rankings = rfe_selector.ranking_
+    feature_importances = list(zip(X.columns, feature_rankings))
+    feature_importances.sort(key=lambda x: x[1])  # Sort by ranking (lower is better)
+    
+    print(f"\nTop 10 features by RFE ranking:")
+    print("-" * 70)
+    for i, (feat, rank) in enumerate(feature_importances[:10], 1):
+        selected_marker = "✓" if feat in selected_feature_names else "✗"
+        print(f"  {i:2d}. {selected_marker} {feat[:50]:<50} Rank: {rank}")
+    
+    print(f"\nInterpretation:")
+    print(f"  • RFE recursively removes least important features")
+    print(f"  • Uses cross-validation internally to evaluate feature importance")
+    print(f"  • Selected features are most predictive for the target")
+    print(f"  • More computationally expensive than filter methods but often more accurate")
+    
+    return selected_indices, selected_feature_names, rfe_selector, n_selected
+
+
+def select_features_mutual_info(X, y, n_features=100, random_state=42):
+    """
+    Select features using Mutual Information.
+    
+    :param X: Feature matrix
+    :param y: Target labels
+    :param n_features: Number of features to select
+    :param random_state: Random seed
+    :return: Selected feature indices, feature names, selector, number of features selected
+    """
+    print("\n" + "=" * 70)
+    print("MUTUAL INFORMATION FEATURE SELECTION")
+    print("=" * 70)
+    
+    # Validate n_features
+    n_features = min(n_features, X.shape[1])
+    if n_features <= 0:
+        raise ValueError(f"n_features must be positive, got {n_features}")
+    
+    print(f"\nMutual Information Configuration:")
+    print(f"  Target number of features: {n_features}")
+    print(f"  Scoring function: mutual_info_classif")
+    
+    print(f"\nComputing mutual information scores...")
+    start_time = time.time()
+    
+    # Create mutual information selector
+    mi_selector = SelectKBest(
+        score_func=mutual_info_classif,
+        k=n_features
+    )
+    
+    mi_selector.fit(X, y)
+    mi_time = time.time() - start_time
+    
+    # Get selected features
+    selected_mask = mi_selector.get_support()
+    selected_indices = np.where(selected_mask)[0]
+    selected_feature_names = X.columns[selected_indices].tolist()
+    
+    n_selected = len(selected_indices)
+    
+    print(f"\n✓ Mutual Information selected {n_selected} features out of {X.shape[1]} ({n_selected/X.shape[1]*100:.1f}%)")
+    print(f"  Selection time: {mi_time:.2f} seconds")
+    
+    # Get feature scores
+    feature_scores = mi_selector.scores_
+    feature_importances = list(zip(X.columns, feature_scores))
+    feature_importances.sort(key=lambda x: x[1], reverse=True)  # Sort by score (higher is better)
+    
+    print(f"\nTop 10 features by Mutual Information score:")
+    print("-" * 70)
+    for i, (feat, score) in enumerate(feature_importances[:10], 1):
+        selected_marker = "✓" if feat in selected_feature_names else "✗"
+        print(f"  {i:2d}. {selected_marker} {feat[:50]:<50} MI: {score:.6f}")
+    
+    print(f"\nInterpretation:")
+    print(f"  • Mutual Information measures dependency between features and target")
+    print(f"  • Higher MI = stronger relationship with target variable")
+    print(f"  • Fast filter method, independent of classifier")
+    print(f"  • Captures both linear and non-linear relationships")
+    
+    return selected_indices, selected_feature_names, mi_selector, n_selected
+
+
+def tune_hyperparameters(X_train, y_train, method='random', n_iter=20, cv_folds=5, random_state=42):
+    """
+    Perform hyperparameter tuning using GridSearchCV or RandomizedSearchCV.
     
     :param X_train: Training features
     :param y_train: Training labels
-    :param n_iter: Number of parameter settings to sample
+    :param method: 'grid' for GridSearchCV or 'random' for RandomizedSearchCV
+    :param n_iter: Number of parameter settings to sample (for Random Search only)
     :param cv_folds: Number of cross-validation folds
     :param random_state: Random seed
     :return: Best estimator and search results
     """
     print("\n" + "=" * 70)
-    print("HYPERPARAMETER TUNING (Randomized Search)")
+    if method == 'grid':
+        print("HYPERPARAMETER TUNING (Grid Search)")
+    else:
+        print("HYPERPARAMETER TUNING (Random Search)")
     print("=" * 70)
     
-    # Define parameter distribution
-    param_dist = {
-        'n_estimators': [10, 20, 50, 100, 200],
-        'max_depth': [5, 10, 15, 20, 30, None],
-        'min_samples_split': [2, 5, 10, 15],
-        'max_features': ['sqrt', 'log2', None],
+    # Define parameter grid (same for both methods)
+    param_grid = {
+        'n_estimators': [10, 20, 50, 100],
+        'max_depth': [5, 10, 15, 20, None],
+        'min_samples_split': [2, 5, 10],
+        'max_features': ['sqrt', 'log2'],
         'criterion': ['gini', 'entropy']
     }
     
     print(f"\nParameter search space:")
-    for param, values in param_dist.items():
+    for param, values in param_grid.items():
         print(f"  {param}: {values}")
     
+    total_combinations = 1
+    for values in param_grid.values():
+        total_combinations *= len(values)
+    print(f"\nTotal parameter combinations: {total_combinations}")
+    
     print(f"\nSearch settings:")
-    print(f"  Iterations: {n_iter}")
+    if method == 'random':
+        print(f"  Method: Randomized Search")
+        print(f"  Iterations: {n_iter}")
+    else:
+        print(f"  Method: Grid Search")
+        print(f"  Will evaluate all {total_combinations} combinations")
     print(f"  CV folds: {cv_folds}")
     print(f"  Scoring: f1_weighted")
     
     # Create base Random Forest
     rf_base = RandomForest(random_state=random_state)
     
-    # Perform randomized search
-    print(f"\nRunning RandomizedSearchCV (this may take a while)...")
-    random_search = RandomizedSearchCV(
-        rf_base,
-        param_distributions=param_dist,
-        n_iter=n_iter,
-        cv=cv_folds,
-        scoring='f1_weighted',
-        random_state=random_state,
-        n_jobs=-1,
-        verbose=1
-    )
+    # Perform search
+    if method == 'grid':
+        print(f"\nRunning GridSearchCV (this may take a while)...")
+        search = GridSearchCV(
+            rf_base,
+            param_grid=param_grid,
+            cv=cv_folds,
+            scoring='f1_weighted',
+            n_jobs=-1,
+            verbose=1
+        )
+    else:
+        print(f"\nRunning RandomizedSearchCV (this may take a while)...")
+        search = RandomizedSearchCV(
+            rf_base,
+            param_distributions=param_grid,
+            n_iter=n_iter,
+            cv=cv_folds,
+            scoring='f1_weighted',
+            random_state=random_state,
+            n_jobs=-1,
+            verbose=1
+        )
     
-    random_search.fit(X_train, y_train)
+    search.fit(X_train, y_train)
     
     print("\n" + "=" * 70)
     print("TUNING RESULTS")
     print("=" * 70)
     print(f"\nBest parameters found:")
-    for param, value in random_search.best_params_.items():
+    for param, value in search.best_params_.items():
         print(f"  {param}: {value}")
     
-    print(f"\nBest CV F1 Score (weighted): {random_search.best_score_:.4f}")
+    print(f"\nBest CV F1 Score (weighted): {search.best_score_:.4f}")
     
     # Show top 5 parameter combinations
-    results_df = pd.DataFrame(random_search.cv_results_)
+    results_df = pd.DataFrame(search.cv_results_)
     results_df = results_df.sort_values('rank_test_score')
     
     print(f"\nTop 5 parameter combinations:")
@@ -422,7 +597,7 @@ def tune_hyperparameters(X_train, y_train, n_iter=20, cv_folds=5, random_state=4
         for param, value in params.items():
             print(f"   {param}: {value}")
     
-    return random_search.best_estimator_, random_search
+    return search.best_estimator_, search
 
 
 def compare_models(baseline_metrics, tuned_metrics, dataset_name='Test'):
@@ -562,18 +737,50 @@ def main():
         print(f"\nLasso (L1) Feature Selection")
         
         start_time = time.time()
-        lasso_indices, lasso_features, lasso_selector, n_lasso = select_features_lasso(
+        selected_indices, selected_feature_names, selector, n_selected = select_features_lasso(
             X, y, C=args.lasso_C, random_state=args.random_seed
         )
-        lasso_time = time.time() - start_time
+        selection_time = time.time() - start_time
         
-        X = X.iloc[:, lasso_indices]
-        selected_feature_names = lasso_features
+        X = X.iloc[:, selected_indices]
         
-        print(f"  Selection time: {lasso_time:.2f} seconds")
+        print(f"  Selection time: {selection_time:.2f} seconds")
         print(f"\n✓ Using Lasso-selected features for training")
         print(f"Final feature set: {X.shape[1]} features")
         print(f"Speed improvement: ~{original_features / X.shape[1]:.1f}x faster!\n")
+        
+    elif args.feature_selection == 'rfe':
+        print(f"\nRecursive Feature Elimination (RFE)")
+        
+        start_time = time.time()
+        selected_indices, selected_feature_names, selector, n_selected = select_features_rfe(
+            X, y, n_features=args.n_features, step=args.rfe_step, random_state=args.random_seed
+        )
+        selection_time = time.time() - start_time
+        
+        X = X.iloc[:, selected_indices]
+        
+        print(f"  Selection time: {selection_time:.2f} seconds")
+        print(f"\n✓ Using RFE-selected features for training")
+        print(f"Final feature set: {X.shape[1]} features")
+        print(f"Speed improvement: ~{original_features / X.shape[1]:.1f}x faster!\n")
+        
+    elif args.feature_selection == 'mutual_info':
+        print(f"\nMutual Information Feature Selection")
+        
+        start_time = time.time()
+        selected_indices, selected_feature_names, selector, n_selected = select_features_mutual_info(
+            X, y, n_features=args.n_features, random_state=args.random_seed
+        )
+        selection_time = time.time() - start_time
+        
+        X = X.iloc[:, selected_indices]
+        
+        print(f"  Selection time: {selection_time:.2f} seconds")
+        print(f"\n✓ Using Mutual Information-selected features for training")
+        print(f"Final feature set: {X.shape[1]} features")
+        print(f"Speed improvement: ~{original_features / X.shape[1]:.1f}x faster!\n")
+        
     else:  # none
         print(f"\n✓ No feature selection - using all {original_features} features")
         selected_feature_names = X.columns.tolist()
@@ -706,6 +913,7 @@ def main():
         # Perform hyperparameter tuning
         best_rf, search_results = tune_hyperparameters(
             X_train, y_train,
+            method=args.tuning_method,
             n_iter=args.tuning_iterations,
             cv_folds=args.cv_folds,
             random_state=args.random_seed

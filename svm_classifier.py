@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
 from sklearn.metrics import (
     accuracy_score,
     precision_recall_fscore_support,
@@ -189,6 +189,15 @@ def parse_args():
     parser.add_argument("--C", type=float, default=1.0)
     parser.add_argument("--gamma", type=str, default="scale")
     parser.add_argument("--degree", type=int, default=3)
+    parser.add_argument("--tune-hyperparameters", action='store_true',
+                        help='Enable hyperparameter tuning')
+    parser.add_argument("--tuning-method", type=str, default='random',
+                        choices=['grid', 'random'],
+                        help='Tuning method: grid (GridSearchCV) or random (RandomizedSearchCV)')
+    parser.add_argument("--tuning-iterations", type=int, default=20,
+                        help='Number of iterations for RandomizedSearchCV')
+    parser.add_argument("--cv-folds", type=int, default=5,
+                        help='Number of CV folds for hyperparameter tuning')
 
     parser.add_argument("--output-dir", type=str, default="svm_results")
     parser.add_argument("--random-state", type=int, default=42)
@@ -225,17 +234,91 @@ def main():
         stratify=y
     )
 
-    # Train classifier
-    svm = SVMClassifier(
-        kernel=args.kernel,
-        C=args.C,
-        gamma=args.gamma,
-        degree=args.degree,
-        random_state=args.random_state,
-    )
-
-    print("Training SVM...")
-    svm.fit(X_train, y_train)
+    # Hyperparameter tuning (if enabled)
+    if args.tune_hyperparameters:
+        print("\n" + "=" * 70)
+        if args.tuning_method == 'grid':
+            print("HYPERPARAMETER TUNING (Grid Search)")
+        else:
+            print("HYPERPARAMETER TUNING (Random Search)")
+        print("=" * 70)
+        
+        # Define parameter grid
+        param_grid = {
+            'kernel': ['linear', 'rbf', 'poly'],
+            'C': [0.1, 1.0, 10.0, 100.0],
+            'gamma': ['scale', 'auto', 0.001, 0.01, 0.1, 1.0],
+            'degree': [2, 3, 4]  # Only used for poly kernel
+        }
+        
+        print(f"\nParameter search space:")
+        for param, values in param_grid.items():
+            print(f"  {param}: {values}")
+        
+        # Calculate approximate total (some combinations invalid for non-poly kernels)
+        total_combinations = len(param_grid['kernel']) * len(param_grid['C']) * len(param_grid['gamma']) * len(param_grid['degree'])
+        print(f"\nApproximate total combinations: {total_combinations}")
+        
+        if args.tuning_method == 'random':
+            print(f"Random iterations: {args.tuning_iterations}")
+        print(f"CV folds: {args.cv_folds}")
+        
+        # Create base SVM (using sklearn's SVC directly for compatibility with GridSearchCV)
+        from sklearn.svm import SVC as SklearnSVC
+        
+        # Perform search
+        if args.tuning_method == 'grid':
+            print("\nRunning GridSearchCV...")
+            search = GridSearchCV(
+                SklearnSVC(probability=False, random_state=args.random_state),
+                param_grid=param_grid,
+                cv=args.cv_folds,
+                scoring='f1_weighted',
+                n_jobs=-1,
+                verbose=1
+            )
+        else:
+            print("\nRunning RandomizedSearchCV...")
+            search = RandomizedSearchCV(
+                SklearnSVC(probability=False, random_state=args.random_state),
+                param_distributions=param_grid,
+                n_iter=args.tuning_iterations,
+                cv=args.cv_folds,
+                scoring='f1_weighted',
+                random_state=args.random_state,
+                n_jobs=-1,
+                verbose=1
+            )
+        
+        search.fit(X_train, y_train)
+        
+        print("\nBest parameters found:")
+        for param, value in search.best_params_.items():
+            print(f"  {param}: {value}")
+        print(f"Best CV F1 Score: {search.best_score_:.4f}")
+        
+        # Use best model (wrap in SVMClassifier for consistency)
+        best_params = search.best_params_
+        svm = SVMClassifier(
+            kernel=best_params['kernel'],
+            C=best_params['C'],
+            gamma=best_params['gamma'],
+            degree=best_params.get('degree', 3),
+            random_state=args.random_state
+        )
+        print("\nUsing best tuned model for evaluation...")
+        svm.fit(X_train, y_train)
+    else:
+        # Train classifier with default/specified parameters
+        svm = SVMClassifier(
+            kernel=args.kernel,
+            C=args.C,
+            gamma=args.gamma,
+            degree=args.degree,
+            random_state=args.random_state,
+        )
+        print("Training SVM...")
+        svm.fit(X_train, y_train)
 
     print("Predicting...")
     y_pred = svm.predict(X_test)

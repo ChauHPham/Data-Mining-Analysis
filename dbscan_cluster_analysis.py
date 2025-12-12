@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
 from sklearn.neighbors import NearestNeighbors
 import argparse
@@ -31,6 +32,12 @@ def parse_args():
                         help = 'Number of PCA components before clustering')
     parser.add_argument('--vis-dims', type = int, default = 2, choices = [2, 3],
                         help = 'Dimensions for visualization (2 or 3)')
+    parser.add_argument('--vis-method', type=str, default='pca', choices=['pca', 'tsne'],
+                        help='Dimensionality reduction method for visualization: pca or tsne (default: pca)')
+    parser.add_argument('--tsne-perplexity', type=float, default=30.0,
+                        help='Perplexity parameter for t-SNE (default: 30.0)')
+    parser.add_argument('--tsne-iterations', type=int, default=1000,
+                        help='Number of iterations for t-SNE (default: 1000)')
     parser.add_argument('--sample-size', type = int, default = 1000,
                         help = 'Limit number of samples (DBScan runs over every sample point)')
     parser.add_argument('--random-seed', type = int, default = 42,
@@ -95,7 +102,7 @@ def apply_pca(X, n_components):
     return X_pca
 
 # Scatter Plot Visualization (same structure as cluster_analysis.py and hierarchical_cluster_analysis.py)
-def visualize_cluster(X_vis, clustering, title, save_path, silhouette_score = None):
+def visualize_cluster(X_vis, clustering, title, save_path, silhouette_score = None, method='PCA'):
     """ Visualization of 2D or 3D scatterplots with colour-coded clusters."""
     num_dims = X_vis.shape[1]
     # Get unique clusters 
@@ -134,8 +141,12 @@ def visualize_cluster(X_vis, clustering, title, save_path, silhouette_score = No
             title += f"\nSilhouette: {silhouette_score:.4f}"
 
         plt.title(title, fontsize = 14, fontweight = "bold")
-        plt.xlabel("Principal Component 1", fontsize=12)
-        plt.ylabel("Principal Component 2", fontsize=12)
+        if method == 't-SNE':
+            plt.xlabel("t-SNE Dimension 1", fontsize=12)
+            plt.ylabel("t-SNE Dimension 2", fontsize=12)
+        else:
+            plt.xlabel("Principal Component 1", fontsize=12)
+            plt.ylabel("Principal Component 2", fontsize=12)
         plt.legend(bbox_to_anchor = (1.05, 1), loc = "upper left")
         plt.tight_layout()
         plt.savefig(save_path, dpi = 300, bbox_inches = "tight")
@@ -168,9 +179,14 @@ def visualize_cluster(X_vis, clustering, title, save_path, silhouette_score = No
             title += f"\nSilhouette: {silhouette_score:.4f}"
 
         ax.set_title(title, fontsize = 14, fontweight = "bold")
-        ax.set_xlabel("Principal Component 1", fontsize = 11)
-        ax.set_ylabel("Principal Component 2", fontsize = 11)
-        ax.set_zlabel("Principal Component 3", fontsize = 11)
+        if method == 't-SNE':
+            ax.set_xlabel("t-SNE Dimension 1", fontsize = 11)
+            ax.set_ylabel("t-SNE Dimension 2", fontsize = 11)
+            ax.set_zlabel("t-SNE Dimension 3", fontsize = 11)
+        else:
+            ax.set_xlabel("Principal Component 1", fontsize = 11)
+            ax.set_ylabel("Principal Component 2", fontsize = 11)
+            ax.set_zlabel("Principal Component 3", fontsize = 11)
         ax.legend(bbox_to_anchor = (1.05, 1), loc = "upper left")
 
         plt.savefig(save_path, dpi = 300, bbox_inches = "tight")
@@ -342,19 +358,40 @@ def main():
     print("Saved as dbscan_silhouette_scores.png.")
 
     # Reduce dataset for 2D and 3D Visualization 
-    print(f"\nReducing to {args.vis_dims}D for visualization...")
-    X_vis = PCA(n_components=args.vis_dims).fit_transform(X)
+    print(f"\nReducing to {args.vis_dims}D for visualization using {args.vis_method.upper()}...")
+    
+    if args.vis_method == 'tsne':
+        print(f"  t-SNE parameters: perplexity={args.tsne_perplexity}, iterations={args.tsne_iterations}")
+        print("  Note: t-SNE can be slow for large datasets. Consider using PCA for faster visualization.")
+        
+        # For t-SNE, use PCA-reduced data first to speed up computation
+        print("  Pre-reducing with PCA to 50 components for faster t-SNE computation...")
+        X_pca_pre = PCA(n_components=min(50, X.shape[1])).fit_transform(X)
+        
+        tsne = TSNE(
+            n_components=args.vis_dims,
+            perplexity=args.tsne_perplexity,
+            n_iter=args.tsne_iterations,
+            random_state=args.random_seed,
+            verbose=1
+        )
+        X_vis = tsne.fit_transform(X_pca_pre)
+        vis_method = 't-SNE'
+    else:
+        X_vis = PCA(n_components=args.vis_dims).fit_transform(X)
+        vis_method = 'PCA'
 
     print(f"\nVisualizing clusters...")
     vis_title = f"DBScan Clustering (eps={best_eps:.4f}, minPts={minPts})"
-    vis_file = f"dbscan.png"
+    vis_file = f"dbscan_{args.vis_method}.png"
 
     # Produce scatter plot for clustering
-    visualize_cluster(X_vis, best_clustering, vis_title, vis_file, silhouette_score=best_score if best_score > -1 else None)
+    visualize_cluster(X_vis, best_clustering, vis_title, vis_file, 
+                     silhouette_score=best_score if best_score > -1 else None, method=vis_method)
     print(f"Saved scatterplot as {vis_file}.")
     print("DBScan clustering analysis complete!")
     print("\n Files saved:")
-    print("- dbscan_silhouette_scores.png.")
+    print("- dbscan_silhouette_scores.png")
     print(f"- {vis_file}")
 
 if __name__ == "__main__":
