@@ -59,7 +59,8 @@ Performs optimized K-Means clustering on the diabetic patient dataset to identif
 
 **Key Features:**
 - ✓ **KMeans++ initialization** for optimal clustering (fast & efficient!)
-- ✓ Silhouette score evaluation shown directly in visualizations
+- ✓ **Feature Selection**: RFE and/or Mutual Information to reduce dimensionality
+- ✓ Silhouette score, Calinski-Harabasz Index, and Davies-Bouldin Index evaluation
 - ✓ 2D or 3D scatter plot support
 - ✓ Vectorized distance computation for speed
 - ✓ Sampling optimization for large datasets
@@ -69,6 +70,18 @@ Performs optimized K-Means clustering on the diabetic patient dataset to identif
 ```bash
 # Quick test (2D visualization) - 20 seconds
 python cluster_analysis.py --min-k 2 --max-k 4 --pca-components 30
+
+# With feature selection (RFE) - faster and more focused
+python cluster_analysis.py --feature-selection rfe --n-features 100
+
+# With Mutual Information feature selection
+python cluster_analysis.py --feature-selection mutual_info --n-features 100
+
+# With Lasso (L1) Regression feature selection
+python cluster_analysis.py --feature-selection lasso --lasso-C 0.1
+
+# Combined RFE + Mutual Information (most conservative)
+python cluster_analysis.py --feature-selection both --n-features 100
 
 # Full analysis with 3D visualization - 30-60 seconds
 python cluster_analysis.py --vis-dims 3
@@ -82,6 +95,9 @@ python cluster_analysis.py
 - `--min-k N`: Minimum number of clusters (default: 2)
 - `--max-k N`: Maximum number of clusters (default: 6)
 - `--pca-components N`: PCA components for clustering (default: 50)
+- `--feature-selection METHOD`: Feature selection method: `none`, `rfe`, `mutual_info`, `lasso`, or `both` (default: `none`)
+- `--n-features N`: Number of features to select (default: 100, for RFE and mutual_info)
+- `--lasso-C FLOAT`: Inverse regularization strength for Lasso (default: 0.1, smaller = more selective)
 - `--vis-dims {2,3}`: 2D or 3D visualization (default: 2)
 - `--random-seed N`: Random seed for reproducibility (default: 42)
 
@@ -252,16 +268,27 @@ Performs **Agglomerative Hierarchical Clustering** on PCA-reduced data and selec
 ### **Quick Run**
 
 ```bash
-python hierarchical_clustering_analysis.py
+# Default run
+python hierarchical_cluster_analysis.py
+
+# With feature selection (RFE)
+python hierarchical_cluster_analysis.py --feature-selection rfe --n-features 100
+
+# With Mutual Information
+python hierarchical_cluster_analysis.py --feature-selection mutual_info --n-features 100
+
+# With Lasso (L1) Regression
+python hierarchical_cluster_analysis.py --feature-selection lasso --lasso-C 0.1
 ```
 
 ### **What it does**
 
 * Full preprocessing pipeline
+* **Feature Selection**: Optional RFE and/or Mutual Information (reduces dimensionality)
 * Samples dataset (2,000 rows default)
 * PCA (50 components)
 * Tests k = 2…6
-* Computes silhouette scores
+* Computes silhouette scores, Calinski-Harabasz Index, and Davies-Bouldin Index
 * Produces a 2D PCA scatter plot of the best clustering
 
 ### **Outputs**
@@ -397,6 +424,9 @@ Performs **Density-based Clustering** on the PCA-reduced diabetic patient datase
 
 * `--data`: Path to CSV dataset (default path set to: data/diabetic_data.csv)
 * `--pca-components N`: number of PCA components for clustering (default set to: 50)
+* `--feature-selection METHOD`: Feature selection method: `none`, `rfe`, `mutual_info`, `lasso`, or `both` (default: `none`)
+* `--n-features N`: Number of features to select (default: 100, for RFE and mutual_info)
+* `--lasso-C FLOAT`: Inverse regularization strength for Lasso (default: 0.1, smaller = more selective)
 * `--vis-dims`: 2D or 3D scatter plot visualization (default set to: 2)
 * `--sample-size`: Limit number of dataset samples for DBScan running time (default set to: 1000)
 * `--random-seed`: Random seed for reproducibility (default set to: 42)
@@ -404,15 +434,26 @@ Performs **Density-based Clustering** on the PCA-reduced diabetic patient datase
 ### **Quick Run**
 
 ```bash
+# Default run
 python dbscan_cluster_analysis.py
+
+# With feature selection (RFE)
+python dbscan_cluster_analysis.py --feature-selection rfe --n-features 100
+
+# With Mutual Information
+python dbscan_cluster_analysis.py --feature-selection mutual_info --n-features 100
+
+# With Lasso (L1) Regression
+python dbscan_cluster_analysis.py --feature-selection lasso --lasso-C 0.1
 ```
 
 ### **Features**
 
 * Data preprocessed and loaded 
+* **Feature Selection**: Optional RFE and/or Mutual Information (reduces dimensionality)
 * Takes representative sample of dataset (1000)
 * Dimensionality reduced PCA dataset 
-* Computes and visualizes silhouette score of clusters 
+* Computes and visualizes silhouette score, Calinski-Harabasz Index, and Davies-Bouldin Index
 * Supports a 2D/3D scatterplot of clusterings 
 
 ### **Outputs**

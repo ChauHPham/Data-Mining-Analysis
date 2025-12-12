@@ -335,16 +335,20 @@ def main():
             plt.xlabel('t-SNE Dimension 1', fontsize=12)
             plt.ylabel('t-SNE Dimension 2', fontsize=12)
             plt.title(f'{vis_method} Projection Colored by Readmission Status', fontsize=14, fontweight='bold')
-            plt.savefig(f'readmission_labels_{args.vis_method}.png', dpi=300, bbox_inches='tight')
-            print(f"  Saved readmission labels comparison plot to readmission_labels_{args.vis_method}.png")
         else:
             plt.xlabel('Principal Component 1', fontsize=12)
             plt.ylabel('Principal Component 2', fontsize=12)
             plt.title('PCA Projection Colored by Readmission Status', fontsize=14, fontweight='bold')
-            plt.savefig('readmission_labels_pca.png', dpi=300, bbox_inches='tight')
-            print("  Saved readmission labels comparison plot to readmission_labels_pca.png")
+        
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
         plt.tight_layout()
+        
+        if vis_method == 't-SNE':
+            plt.savefig(f'readmission_labels_{args.vis_method}.png', dpi=300, bbox_inches='tight')
+            print(f"  Saved readmission labels comparison plot to readmission_labels_{args.vis_method}.png")
+        else:
+            plt.savefig('readmission_labels_pca.png', dpi=300, bbox_inches='tight')
+            print("  Saved readmission labels comparison plot to readmission_labels_pca.png")
         plt.close()
     
     print("\n" + "=" * 70)
