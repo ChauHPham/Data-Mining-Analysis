@@ -689,10 +689,10 @@ See `RUN_INSTRUCTIONS.md` for detailed usage instructions
 
 ## Project Contributors
 
-CMPT 459 Course Project Team
+Course Project Team
 
 ---
 
 ## License
 
-This project is for educational purposes as part of CMPT 459 coursework.
+This project is for educational purposes. 
